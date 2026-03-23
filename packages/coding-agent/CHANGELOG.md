@@ -19,3 +19,4 @@ Forked from [Pi v0.62.0](https://github.com/badlogic/pi-mono/releases/tag/v0.62.
   - Agent thinking level and model override from AGENT.md frontmatter
   - Cost limits: `max-cost` frontmatter, per-invocation `maxCost` parameter, `defaultAgentMaxCost` setting. Agents abort when cost exceeded with "cost-limit" status
   - Background execution: `run_in_background` parameter starts agents asynchronously. `agent_status` companion tool for checking, listing, and aborting background agents
+  - Agent communication: `send_message` action on `agent_status` resumes completed agents with full context or steers running agents

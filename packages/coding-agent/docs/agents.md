@@ -229,12 +229,21 @@ Use the `agent_status` tool to interact with background agents:
 | `list` | List all tracked agents with status |
 | `check` | Get status or full result of a specific agent |
 | `abort` | Cancel a running background agent |
+| `send_message` | Send a follow-up message to an agent (running or completed) |
 
 ```
 agent_status { action: "list" }
 agent_status { agent_id: "agent-1", action: "check" }
 agent_status { agent_id: "agent-1", action: "abort" }
+agent_status { agent_id: "agent-1", action: "send_message", message: "Now do X" }
 ```
+
+### Agent Communication
+
+Completed agents retain their full conversation context. Use `send_message` to resume an agent's work:
+
+- **Completed agent**: Calls `agent.prompt(message)` -- the agent continues with full history and returns a new response.
+- **Running agent**: Calls `agent.steer(message)` -- the message is queued and delivered after the current turn's tool calls finish.
 
 Background agents respect the same cost limits, max turns, and abort signals as foreground agents. Up to 50 agents can be tracked per session.
 

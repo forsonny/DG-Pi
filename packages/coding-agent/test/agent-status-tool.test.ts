@@ -185,4 +185,114 @@ describe("agent_status tool", () => {
 
 		tracker.dispose();
 	});
+
+	it("should send_message to a completed agent and get new response", async () => {
+		const tracker = new AgentTracker();
+
+		// Create a mock agent that responds to prompt()
+		let promptCount = 0;
+		const agent = {
+			abort: () => {},
+			state: {
+				messages: [
+					{ role: "user", content: "First task", timestamp: Date.now() },
+					{
+						role: "assistant",
+						content: [{ type: "text", text: "First response" }],
+						usage: { totalTokens: 100, cost: { total: 0.001 } },
+						stopReason: "stop",
+						timestamp: Date.now(),
+					},
+				],
+				isStreaming: false,
+			},
+			prompt: async (msg: any) => {
+				promptCount++;
+				// Simulate adding the new exchange to messages
+				agent.state.messages.push(
+					{ role: "user", content: typeof msg === "string" ? msg : msg.content, timestamp: Date.now() },
+					{
+						role: "assistant",
+						content: [{ type: "text", text: "Follow-up response" }],
+						usage: { totalTokens: 50, cost: { total: 0.001 } },
+						stopReason: "stop",
+						timestamp: Date.now(),
+					},
+				);
+			},
+			waitForIdle: async () => {},
+		} as any;
+
+		tracker.register("explore", agent, Promise.resolve(mockResult("First response")));
+		await new Promise((r) => setTimeout(r, 10)); // Let completion settle
+
+		const toolDef = createAgentStatusToolDefinition({ agentTracker: tracker });
+		const result = await toolDef.execute(
+			"call-1",
+			{ agent_id: "agent-1", action: "send_message", message: "Now do something else" },
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		const text = (result.content[0] as TextContent).text;
+		expect(text).toContain("Follow-up response");
+		expect(text).toContain("resumed");
+		expect(promptCount).toBe(1);
+
+		tracker.dispose();
+	});
+
+	it("should steer a running agent with send_message", async () => {
+		const tracker = new AgentTracker();
+
+		let steeredMessage: any;
+		const agent = {
+			abort: () => {},
+			state: { messages: [], isStreaming: true },
+			steer: (msg: any) => {
+				steeredMessage = msg;
+			},
+		} as any;
+
+		const neverResolve = new Promise<any>(() => {});
+		tracker.register("code", agent, neverResolve);
+
+		const toolDef = createAgentStatusToolDefinition({ agentTracker: tracker });
+		const result = await toolDef.execute(
+			"call-1",
+			{ agent_id: "agent-1", action: "send_message", message: "Focus on tests" },
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		const text = (result.content[0] as TextContent).text;
+		expect(text).toContain("queued");
+		expect(steeredMessage).toBeDefined();
+		expect(steeredMessage.content).toBe("Focus on tests");
+
+		tracker.dispose();
+	});
+
+	it("should error on send_message without message", async () => {
+		const tracker = new AgentTracker();
+		const agent = createMockAgent();
+		tracker.register("explore", agent, Promise.resolve(mockResult("Done")));
+		await new Promise((r) => setTimeout(r, 10));
+
+		const toolDef = createAgentStatusToolDefinition({ agentTracker: tracker });
+		const result = await toolDef.execute(
+			"call-1",
+			{ agent_id: "agent-1", action: "send_message" },
+			undefined,
+			undefined,
+			{} as any,
+		);
+
+		const text = (result.content[0] as TextContent).text;
+		expect(text).toContain("'message' is required");
+
+		tracker.dispose();
+	});
 });

@@ -12,9 +12,15 @@ const agentStatusSchema = Type.Object({
 		Type.String({ description: "ID of a specific background agent to check (e.g. 'agent-1'). Omit to list all." }),
 	),
 	action: Type.Optional(
-		Type.Union([Type.Literal("check"), Type.Literal("abort"), Type.Literal("list")], {
+		Type.Union([Type.Literal("check"), Type.Literal("abort"), Type.Literal("list"), Type.Literal("send_message")], {
 			description:
-				"Action to perform. 'check' (default): get status/result. 'abort': cancel running agent. 'list': list all agents.",
+				"Action to perform. 'check' (default): get status/result. 'abort': cancel running agent. 'list': list all agents. 'send_message': send a follow-up message to an agent.",
+		}),
+	),
+	message: Type.Optional(
+		Type.String({
+			description:
+				"Message to send when action is 'send_message'. The agent resumes with its full context preserved.",
 		}),
 	),
 });
@@ -55,8 +61,9 @@ export function createAgentStatusToolDefinition(
 		name: "agent_status",
 		label: "Agent Status",
 		description:
-			"Check the status of background agents, retrieve their results, or abort running agents. " +
-			"Use after spawning agents with run_in_background: true.",
+			"Check the status of background agents, retrieve their results, abort running agents, or send follow-up messages. " +
+			"Use after spawning agents with run_in_background: true. " +
+			"Use 'send_message' to continue a completed agent's conversation with its full context preserved.",
 		promptSnippet: "Check status of background agents",
 		parameters: agentStatusSchema,
 
@@ -122,6 +129,89 @@ export function createAgentStatusToolDefinition(
 					],
 					details: { agentCount: 1 },
 				};
+			}
+
+			if (action === "send_message") {
+				if (!params.message) {
+					return {
+						content: [{ type: "text", text: "Error: 'message' is required for send_message action." }],
+						details: { agentCount: 0 },
+					};
+				}
+
+				if (tracked.status === "running") {
+					// Steer the running agent
+					tracked.agent.steer({
+						role: "user",
+						content: params.message,
+						timestamp: Date.now(),
+					});
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Message queued for running agent ${agentId} (${tracked.agentName}). It will be delivered after the current turn.`,
+							},
+						],
+						details: { agentCount: 1 },
+					};
+				}
+
+				// Agent is completed/idle -- resume with new prompt
+				const agent = agentTracker.getAgent(agentId);
+				if (!agent) {
+					return {
+						content: [{ type: "text", text: `Error: Agent instance for ${agentId} is no longer available.` }],
+						details: { agentCount: 0 },
+					};
+				}
+
+				// Mark as running again
+				tracked.status = "running";
+				tracked.endedAt = undefined;
+
+				try {
+					await agent.prompt(params.message);
+					await agent.waitForIdle();
+
+					// Extract the new response (last assistant message)
+					const messages = agent.state.messages;
+					let responseText = "(No response)";
+					for (let i = messages.length - 1; i >= 0; i--) {
+						const msg = messages[i];
+						if (msg.role === "assistant" && "content" in msg) {
+							const textBlocks = ((msg as any).content ?? []).filter(
+								(c: any) => c.type === "text" && c.text?.trim(),
+							);
+							if (textBlocks.length > 0) {
+								responseText = textBlocks.map((t: any) => t.text).join("\n");
+								break;
+							}
+						}
+					}
+
+					tracked.status = "success";
+					tracked.endedAt = Date.now();
+
+					const elapsed = formatDuration(tracked.endedAt - tracked.startedAt);
+					return {
+						content: [
+							{
+								type: "text",
+								text: `[Agent ${agentId}: ${tracked.agentName} | resumed | ${elapsed}]\n\n${responseText}`,
+							},
+						],
+						details: { agentCount: 1 },
+					};
+				} catch (error) {
+					tracked.status = "error";
+					tracked.endedAt = Date.now();
+					const errorMsg = error instanceof Error ? error.message : String(error);
+					return {
+						content: [{ type: "text", text: `Error resuming agent ${agentId}: ${errorMsg}` }],
+						details: { agentCount: 1 },
+					};
+				}
 			}
 
 			// action === "check"
