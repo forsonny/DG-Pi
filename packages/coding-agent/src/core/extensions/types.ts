@@ -1304,6 +1304,8 @@ export interface AgentRegistration {
 	maxTurns?: number;
 	/** Max sub-agent nesting depth. Default: 0 (no nesting). */
 	maxNesting?: number;
+	/** Max cost in dollars for agent invocations. */
+	maxCost?: number;
 	/** If true, only available via explicit /agent:name command. */
 	disableModelInvocation?: boolean;
 }

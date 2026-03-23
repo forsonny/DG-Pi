@@ -2254,6 +2254,7 @@ export class AgentSession {
 					thinking: ra.definition.thinking,
 					maxTurns: ra.definition.maxTurns ?? 50,
 					maxNesting: Math.min(ra.definition.maxNesting ?? 0, MAX_NESTING_DEPTH),
+					maxCost: ra.definition.maxCost,
 					disableModelInvocation: ra.definition.disableModelInvocation ?? false,
 				});
 			}
@@ -2302,6 +2303,7 @@ export class AgentSession {
 				getApiKey: this.agent.getApiKey,
 				model: this.agent.state.model,
 				contextFiles: this._resourceLoader.getAgentsFiles().agentsFiles,
+				defaultMaxCost: this.settingsManager.getDefaultAgentMaxCost(),
 			});
 			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
 			definitionRegistry.set("agent", {

@@ -597,6 +597,100 @@ describe("agent tool", () => {
 		});
 	});
 
+	describe("cost limits", () => {
+		it("should abort when cost exceeds limit", async () => {
+			// Each assistant response costs $0.003 (from mock usage).
+			// Multi-turn stream: 10 tool-call turns + 1 final = 11 assistant messages.
+			// With maxCost 0.01, should stop before completing all turns (~3 assistant msgs = $0.009, 4th = $0.012 > $0.01).
+			const testTool = createTestToolDef("test-tool");
+			const parentTools = new Map<string, ToolDefinition>([["test-tool", testTool]]);
+			const agentDef = createTestAgent({ tools: ["test-tool"], maxCost: 0.01 });
+			const registry = new Map([["test-agent", agentDef]]);
+
+			const toolDef = createAgentToolDefinition(
+				createBaseOptions({
+					streamFn: makeMultiTurnStreamFn(10, "Should not reach this"),
+					agentRegistry: registry,
+					parentToolDefinitions: parentTools,
+				}),
+			);
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it" },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(result.details.status).toBe("cost-limit");
+			// Should have been aborted well before all 11 turns completed
+			expect(result.details.cost).toBeGreaterThan(0.01);
+		});
+
+		it("should use per-invocation maxCost override", async () => {
+			const agentDef = createTestAgent({ maxCost: 10 }); // High agent limit
+			const registry = new Map([["test-agent", agentDef]]);
+
+			const testTool = createTestToolDef("test-tool");
+			const parentTools = new Map<string, ToolDefinition>([["test-tool", testTool]]);
+
+			const toolDef = createAgentToolDefinition(
+				createBaseOptions({
+					streamFn: makeMultiTurnStreamFn(10, "Should not reach this"),
+					agentRegistry: registry,
+					parentToolDefinitions: parentTools,
+				}),
+			);
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it", maxCost: 0.005 }, // Low per-invocation override
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(result.details.status).toBe("cost-limit");
+		});
+
+		it("should use defaultMaxCost from options when no other limit set", async () => {
+			const testTool = createTestToolDef("test-tool");
+			const parentTools = new Map<string, ToolDefinition>([["test-tool", testTool]]);
+
+			const toolDef = createAgentToolDefinition(
+				createBaseOptions({
+					streamFn: makeMultiTurnStreamFn(10, "Should not reach this"),
+					parentToolDefinitions: parentTools,
+					defaultMaxCost: 0.005,
+				}),
+			);
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it" },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(result.details.status).toBe("cost-limit");
+		});
+
+		it("should run without limit when no maxCost is set", async () => {
+			const toolDef = createAgentToolDefinition(createBaseOptions());
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it" },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(result.details.status).toBe("success");
+		});
+	});
+
 	describe("details and metadata", () => {
 		it("should include description in details when provided", async () => {
 			const toolDef = createAgentToolDefinition(createBaseOptions());

@@ -28,6 +28,11 @@ const agentSchema = Type.Object({
 	model: Type.Optional(
 		Type.String({ description: "Optional model override for this agent (e.g. 'anthropic/claude-sonnet-4')" }),
 	),
+	maxCost: Type.Optional(
+		Type.Number({
+			description: "Maximum cost in dollars for this agent invocation. Overrides agent and global defaults.",
+		}),
+	),
 });
 
 export type AgentToolInput = Static<typeof agentSchema>;
@@ -38,7 +43,7 @@ export interface AgentToolDetails {
 	turns: number;
 	totalTokens: number;
 	cost: number;
-	status: "success" | "error" | "aborted" | "max-turns";
+	status: "success" | "error" | "aborted" | "max-turns" | "cost-limit";
 	durationMs: number;
 }
 
@@ -73,6 +78,8 @@ export interface AgentToolOptions {
 	model: Model<any>;
 	/** Project context files (AGENTS.md, CLAUDE.md) to pass to subagents */
 	contextFiles?: Array<{ path: string; content: string }>;
+	/** Default max cost in dollars for agent invocations (from settings) */
+	defaultMaxCost?: number;
 	/** Current nesting depth (0 = top-level). Default: 0 */
 	currentDepth?: number;
 	/** Hard nesting limit. Default: 3 */
@@ -224,6 +231,7 @@ export function createAgentToolDefinition(
 		getApiKey,
 		model,
 		contextFiles,
+		defaultMaxCost,
 		currentDepth = 0,
 		maxDepth = 3,
 	} = options;
@@ -264,6 +272,7 @@ export function createAgentToolDefinition(
 				context: additionalContext,
 				model: modelOverride,
 				description: taskDesc,
+				maxCost: maxCostOverride,
 			} = params;
 			const startedAt = Date.now();
 
@@ -315,6 +324,9 @@ export function createAgentToolDefinition(
 			// Resolve thinking level from agent definition
 			const resolvedThinking = resolveThinkingLevel(agentDef.thinking);
 
+			// Resolve cost limit: per-invocation > agent definition > settings default > none
+			const resolvedMaxCost = maxCostOverride ?? agentDef.maxCost ?? defaultMaxCost;
+
 			// Resolve tools for the subagent (from FULL parent tool set including extensions)
 			const subagentTools: AgentTool[] = [];
 			if (agentDef.tools && agentDef.tools.length > 0) {
@@ -343,6 +355,7 @@ export function createAgentToolDefinition(
 					getApiKey,
 					model: resolvedModel,
 					contextFiles,
+					defaultMaxCost,
 					currentDepth: currentDepth + 1,
 					maxDepth,
 				});
@@ -376,6 +389,7 @@ export function createAgentToolDefinition(
 			let turns = 0;
 			let aborted = false;
 			let maxTurnsReached = false;
+			let costLimitReached = false;
 
 			subagent.subscribe((event: AgentEvent) => {
 				if (event.type === "turn_end") {
@@ -389,6 +403,12 @@ export function createAgentToolDefinition(
 
 					// Stream progress update to parent
 					const usage = aggregateUsage(subagent.state.messages);
+
+					// Enforce cost limit
+					if (resolvedMaxCost !== undefined && usage.cost > resolvedMaxCost) {
+						costLimitReached = true;
+						subagent.abort();
+					}
 					onUpdate?.({
 						content: [
 							{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | ${usage.totalTokens} tokens]` },
@@ -450,6 +470,9 @@ export function createAgentToolDefinition(
 				if (aborted) {
 					status = "aborted";
 					headerNote = " (aborted)";
+				} else if (costLimitReached) {
+					status = "cost-limit";
+					headerNote = ` (stopped at $${resolvedMaxCost?.toFixed(2)} cost limit)`;
 				} else if (maxTurnsReached) {
 					status = "max-turns";
 					headerNote = ` (stopped at ${agentDef.maxTurns} turn limit)`;

@@ -161,6 +161,7 @@ Paths in `~/.dg-pi/agent/settings.json` resolve relative to `~/.dg-pi/agent`. Pa
 | `themes` | string[] | `[]` | Local theme file paths or directories |
 | `enableSkillCommands` | boolean | `true` | Register skills as `/skill:name` commands |
 | `enableAgentCommands` | boolean | `true` | Register agents as `/agent:name` commands |
+| `defaultAgentMaxCost` | number | - | Default max cost in dollars per agent invocation |
 
 Arrays support glob patterns and exclusions. Use `!pattern` to exclude. Use `+path` to force-include an exact path and `-path` to force-exclude an exact path.
 

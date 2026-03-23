@@ -63,8 +63,19 @@ describe("agents", () => {
 			expect(agents[0].thinking).toBe("medium");
 			expect(agents[0].maxTurns).toBe(30);
 			expect(agents[0].maxNesting).toBe(2);
+			expect(agents[0].maxCost).toBe(1.5);
 			expect(agents[0].disableModelInvocation).toBe(false);
 			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should default maxCost to undefined when not specified", () => {
+			const { agents } = loadAgentsFromDir({
+				dir: join(fixturesDir, "valid-agent"),
+				source: "test",
+			});
+
+			expect(agents).toHaveLength(1);
+			expect(agents[0].maxCost).toBeUndefined();
 		});
 
 		it("should warn when name doesn't match parent directory", () => {

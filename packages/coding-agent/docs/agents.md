@@ -62,6 +62,7 @@ When the LLM invokes the `agent` tool, it provides:
 | `description` | No | Short (3-5 word) summary of what the agent will do |
 | `context` | No | Additional context (file contents, prior findings) |
 | `model` | No | Model override for this invocation (e.g. `"anthropic/claude-sonnet-4"`) |
+| `maxCost` | No | Maximum cost in dollars. Overrides agent and global defaults |
 
 ## Agent Commands
 
@@ -143,6 +144,7 @@ The frontmatter configures the agent. The body becomes the agent's system prompt
 | `thinking` | No | Thinking level override. |
 | `max-turns` | No | Max agent loop turns. Default: 50. |
 | `max-nesting` | No | Whether this agent can spawn sub-agents. Default: 0. |
+| `max-cost` | No | Maximum cost in dollars per invocation. Agent aborts if exceeded. |
 | `disable-model-invocation` | No | When `true`, agent is hidden from the system prompt. Must be invoked explicitly. |
 
 ### Name Rules

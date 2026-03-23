@@ -17,3 +17,4 @@ Forked from [Pi v0.62.0](https://github.com/badlogic/pi-mono/releases/tag/v0.62.
   - Extension-registered tools accessible to subagents
   - `/agent:name` slash commands with autocomplete
   - Agent thinking level and model override from AGENT.md frontmatter
+  - Cost limits: `max-cost` frontmatter, per-invocation `maxCost` parameter, `defaultAgentMaxCost` setting. Agents abort when cost exceeded with "cost-limit" status

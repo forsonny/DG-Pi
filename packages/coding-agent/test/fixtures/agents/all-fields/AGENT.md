@@ -9,6 +9,7 @@ model: anthropic/claude-sonnet-4
 thinking: medium
 max-turns: 30
 max-nesting: 2
+max-cost: 1.50
 disable-model-invocation: false
 ---
 

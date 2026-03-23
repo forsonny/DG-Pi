@@ -81,6 +81,7 @@ export interface AgentFrontmatter {
 	thinking?: string;
 	"max-turns"?: number;
 	"max-nesting"?: number;
+	"max-cost"?: number;
 	"disable-model-invocation"?: boolean;
 	[key: string]: unknown;
 }
@@ -97,6 +98,7 @@ export interface AgentDefinition {
 	thinking?: string;
 	maxTurns: number;
 	maxNesting: number;
+	maxCost?: number;
 	disableModelInvocation: boolean;
 }
 
@@ -331,6 +333,10 @@ function loadAgentFromFile(
 				thinking: frontmatter.thinking,
 				maxTurns: frontmatter["max-turns"] ?? DEFAULT_MAX_TURNS,
 				maxNesting: Math.min(frontmatter["max-nesting"] ?? DEFAULT_MAX_NESTING, MAX_NESTING_DEPTH),
+				maxCost:
+					typeof frontmatter["max-cost"] === "number" && frontmatter["max-cost"] > 0
+						? frontmatter["max-cost"]
+						: undefined,
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
 			},
 			diagnostics,
