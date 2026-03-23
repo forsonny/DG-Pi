@@ -734,6 +734,38 @@ describe("agent tool", () => {
 		});
 	});
 
+	describe("worktree isolation", () => {
+		it("should error when isolation=worktree outside a git repo", async () => {
+			const toolDef = createAgentToolDefinition(createBaseOptions({ cwd: "/tmp/not-a-git-repo-" + Date.now() }));
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it", isolation: "worktree" },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			const text = (result.content[0] as TextContent).text;
+			expect(text).toContain("not inside a git repository");
+			expect(result.details.status).toBe("error");
+		});
+
+		it("should run without isolation by default", async () => {
+			const toolDef = createAgentToolDefinition(createBaseOptions());
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it" },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(result.details.status).toBe("success");
+			expect(result.details.worktree).toBeUndefined();
+		});
+	});
+
 	describe("background execution", () => {
 		it("should return immediately with agent ID when run_in_background is true", async () => {
 			const tracker = new AgentTracker();

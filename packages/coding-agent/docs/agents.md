@@ -14,6 +14,7 @@ Agents are autonomous subagents that the main agent spawns for focused, independ
 - [Validation](#validation)
 - [Extension Registration](#extension-registration)
 - [Background Execution](#background-execution)
+- [Worktree Isolation](#worktree-isolation)
 - [Nesting](#nesting)
 - [Example](#example)
 - [Agents vs Skills](#agents-vs-skills)
@@ -65,6 +66,7 @@ When the LLM invokes the `agent` tool, it provides:
 | `model` | No | Model override for this invocation (e.g. `"anthropic/claude-sonnet-4"`) |
 | `maxCost` | No | Maximum cost in dollars. Overrides agent and global defaults |
 | `run_in_background` | No | When true, returns immediately with agent ID for async execution |
+| `isolation` | No | Isolation mode. `"worktree"` creates a git worktree for the agent |
 
 ## Agent Commands
 
@@ -246,6 +248,20 @@ Completed agents retain their full conversation context. Use `send_message` to r
 - **Running agent**: Calls `agent.steer(message)` -- the message is queued and delivered after the current turn's tool calls finish.
 
 Background agents respect the same cost limits, max turns, and abort signals as foreground agents. Up to 50 agents can be tracked per session.
+
+## Worktree Isolation
+
+Set `isolation: "worktree"` to give an agent its own copy of the repository via `git worktree`. The agent's tools (read, write, edit, bash, etc.) operate on the worktree directory, preventing file conflicts with the parent conversation.
+
+After the agent completes:
+- **No changes**: the worktree and branch are automatically cleaned up.
+- **Changes exist**: the worktree path and branch name are returned in the result. You can inspect, merge, or delete the branch.
+
+```
+agent { agent: "code", task: "Refactor the auth module", isolation: "worktree" }
+```
+
+Worktree isolation requires a git repository. The agent's branch is named `dg-pi/agent/{name}-{timestamp}`.
 
 ## Nesting
 

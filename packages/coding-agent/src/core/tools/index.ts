@@ -86,6 +86,7 @@ export {
 	truncateLine,
 	truncateTail,
 } from "./truncate.js";
+export { createWorktree, hasChanges, isGitRepo, removeWorktree, type WorktreeInfo } from "./worktree.js";
 export {
 	createWriteTool,
 	createWriteToolDefinition,

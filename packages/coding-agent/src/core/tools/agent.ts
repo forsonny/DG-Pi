@@ -14,7 +14,9 @@ import { type Static, Type } from "@sinclair/typebox";
 import type { AgentDefinition } from "../agents.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import type { AgentTracker } from "./agent-tracker.js";
+import { createAllToolDefinitions } from "./index.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
+import { createWorktree, hasChanges, isGitRepo, removeWorktree, type WorktreeInfo } from "./worktree.js";
 
 // ============================================================================
 // Schema
@@ -36,6 +38,12 @@ const agentSchema = Type.Object({
 				"When true, the agent runs asynchronously and returns immediately with an agent ID. Use agent_status to check results later.",
 		}),
 	),
+	isolation: Type.Optional(
+		Type.Union([Type.Literal("worktree")], {
+			description:
+				'Isolation mode. "worktree" creates a temporary git worktree so the agent works on an isolated copy of the repo.',
+		}),
+	),
 	maxCost: Type.Optional(
 		Type.Number({
 			description: "Maximum cost in dollars for this agent invocation. Overrides agent and global defaults.",
@@ -53,6 +61,11 @@ export interface AgentToolDetails {
 	cost: number;
 	status: "success" | "error" | "aborted" | "max-turns" | "cost-limit";
 	durationMs: number;
+	worktree?: {
+		path: string;
+		branch: string;
+		hasChanges: boolean;
+	};
 }
 
 // ============================================================================
@@ -285,6 +298,7 @@ export function createAgentToolDefinition(
 				description: taskDesc,
 				maxCost: maxCostOverride,
 				run_in_background: runInBackground,
+				isolation,
 			} = params;
 			const startedAt = Date.now();
 
@@ -375,8 +389,59 @@ export function createAgentToolDefinition(
 				subagentTools.push(wrapToolDefinition(nestedAgentToolDef));
 			}
 
-			// Build system prompt
-			const systemPrompt = buildAgentSystemPrompt(agentDef, cwd, contextFiles);
+			// Worktree isolation: create an isolated copy of the repo
+			let effectiveCwd = cwd;
+			let worktreeInfo: WorktreeInfo | undefined;
+
+			if (isolation === "worktree") {
+				if (!isGitRepo(cwd)) {
+					return {
+						content: [
+							{ type: "text", text: 'Error: Cannot use isolation "worktree" -- not inside a git repository.' },
+						],
+						details: {
+							agentName,
+							turns: 0,
+							totalTokens: 0,
+							cost: 0,
+							status: "error" as const,
+							durationMs: Date.now() - startedAt,
+						},
+					};
+				}
+
+				try {
+					worktreeInfo = createWorktree(cwd, agentName);
+					effectiveCwd = worktreeInfo.path;
+
+					// Re-create builtin tools scoped to worktree directory
+					const worktreeToolDefs = createAllToolDefinitions(effectiveCwd);
+					// Replace builtin tools in subagent tools with worktree-scoped versions
+					const builtinNames = new Set(Object.keys(worktreeToolDefs));
+					const nonBuiltinTools = subagentTools.filter((t) => !builtinNames.has(t.name));
+					subagentTools.length = 0;
+					for (const def of Object.values(worktreeToolDefs)) {
+						subagentTools.push(wrapToolDefinition(def));
+					}
+					subagentTools.push(...nonBuiltinTools);
+				} catch (error) {
+					const errorMsg = error instanceof Error ? error.message : String(error);
+					return {
+						content: [{ type: "text", text: `Error creating worktree: ${errorMsg}` }],
+						details: {
+							agentName,
+							turns: 0,
+							totalTokens: 0,
+							cost: 0,
+							status: "error" as const,
+							durationMs: Date.now() - startedAt,
+						},
+					};
+				}
+			}
+
+			// Build system prompt (using effective cwd for worktree)
+			const systemPrompt = buildAgentSystemPrompt(agentDef, effectiveCwd, contextFiles);
 
 			// Build the full prompt for the agent
 			let fullTask = task;
@@ -558,7 +623,29 @@ export function createAgentToolDefinition(
 			}
 
 			// Foreground execution: run and await result
-			return runToCompletion(onUpdate, signal);
+			const result = await runToCompletion(onUpdate, signal);
+
+			// Worktree cleanup
+			if (worktreeInfo) {
+				const wtHasChanges = hasChanges(worktreeInfo.path);
+				if (!wtHasChanges) {
+					// No changes -- clean up automatically
+					removeWorktree(cwd, worktreeInfo.path, worktreeInfo.branch);
+				} else {
+					// Changes exist -- preserve worktree, report in result
+					result.details.worktree = {
+						path: worktreeInfo.path,
+						branch: worktreeInfo.branch,
+						hasChanges: true,
+					};
+					const wtNote = `\n\n[Worktree preserved at ${worktreeInfo.path} (branch: ${worktreeInfo.branch})]`;
+					if (result.content.length > 0 && result.content[0].type === "text") {
+						(result.content[0] as { type: "text"; text: string }).text += wtNote;
+					}
+				}
+			}
+
+			return result;
 		},
 
 		renderCall(args, _theme, context) {
