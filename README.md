@@ -1,27 +1,8 @@
-<!-- OSS_WEEKEND_START -->
-# 🏖️ OSS Weekend
-
-**Issue tracker reopens Monday, March 30, 2026.**
-
-OSS weekend runs Sunday, March 22, 2026 through Monday, March 30, 2026. New issues are auto-closed during this time. For support, join [Discord](https://discord.com/invite/3cU7Bz4UPx).
-<!-- OSS_WEEKEND_END -->
-
----
-
-<p align="center">
-  <a href="https://github.com/forsonny/DG-Pi">
-    <img src="https://github.com/forsonny/DG-Pi/logo.svg" alt="pi logo" width="128">
-  </a>
-</p>
-<p align="center">
-  <a href="https://discord.com/invite/3cU7Bz4UPx"><img alt="Discord" src="https://img.shields.io/badge/discord-community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="https://github.com/forsonny/DG-Pi/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/forsonny/DG-Pi/ci.yml?style=flat-square&branch=main" /></a>
-</p>
 # DG-Pi Monorepo
 
 > **Looking for the DG-Pi coding agent?** See **[packages/coding-agent](packages/coding-agent)** for installation and usage.
 
-Tools for building AI agents and managing LLM deployments.
+Tools for building AI agents and managing LLM deployments. Forked from [Pi](https://github.com/badlogic/pi-mono).
 
 ## Packages
 
@@ -35,10 +16,6 @@ Tools for building AI agents and managing LLM deployments.
 | **[@dg-forsonny/dg-pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
 | **[@dg-forsonny/dg-pi-pods](packages/pods)** | CLI for managing vLLM deployments on GPU pods |
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).
-
 ## Development
 
 ```bash
@@ -46,7 +23,7 @@ npm install          # Install all dependencies
 npm run build        # Build all packages
 npm run check        # Lint, format, and type check
 ./test.sh            # Run tests (skips LLM-dependent tests without API keys)
-./dg-pi-test.sh         # Run pi from sources (must be run from repo root)
+./dg-pi-test.sh      # Run dg-pi from sources (must be run from repo root)
 ```
 
 > **Note:** `npm run check` requires `npm run build` to be run first. The web-ui package uses `tsc` which needs compiled `.d.ts` files from dependencies.
