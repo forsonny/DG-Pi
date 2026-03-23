@@ -2366,11 +2366,13 @@ export class AgentSession {
 			for (const tool of wrappedExtensionTools) {
 				nextActiveToolNames.push(tool.name);
 			}
-		} else if (!options?.activeToolNames) {
-			for (const toolName of this._toolRegistry.keys()) {
-				if (!previousRegistryNames.has(toolName)) {
-					nextActiveToolNames.push(toolName);
-				}
+		}
+
+		// Always include tools that are new to the registry (handles agent tools
+		// added during _refreshToolRegistry, and extension tools on first load)
+		for (const toolName of this._toolRegistry.keys()) {
+			if (!previousRegistryNames.has(toolName)) {
+				nextActiveToolNames.push(toolName);
 			}
 		}
 
