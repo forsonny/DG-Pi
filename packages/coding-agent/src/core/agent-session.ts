@@ -2301,6 +2301,7 @@ export class AgentSession {
 				streamFn: this.agent.streamFn,
 				getApiKey: this.agent.getApiKey,
 				model: this.agent.state.model,
+				contextFiles: this._resourceLoader.getAgentsFiles().agentsFiles,
 			});
 			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
 			definitionRegistry.set("agent", {

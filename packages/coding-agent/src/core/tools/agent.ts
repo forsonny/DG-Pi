@@ -71,6 +71,8 @@ export interface AgentToolOptions {
 	getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
 	/** Parent's current model (used as default for agents without model override) */
 	model: Model<any>;
+	/** Project context files (AGENTS.md, CLAUDE.md) to pass to subagents */
+	contextFiles?: Array<{ path: string; content: string }>;
 	/** Current nesting depth (0 = top-level). Default: 0 */
 	currentDepth?: number;
 	/** Hard nesting limit. Default: 3 */
@@ -81,7 +83,11 @@ export interface AgentToolOptions {
 // System prompt wrapper
 // ============================================================================
 
-function buildAgentSystemPrompt(agent: AgentDefinition, cwd: string): string {
+function buildAgentSystemPrompt(
+	agent: AgentDefinition,
+	cwd: string,
+	contextFiles?: Array<{ path: string; content: string }>,
+): string {
 	const date = new Date().toISOString().slice(0, 10);
 	const promptCwd = cwd.replace(/\\/g, "/");
 
@@ -92,6 +98,15 @@ function buildAgentSystemPrompt(agent: AgentDefinition, cwd: string): string {
 	if (agent.systemPrompt) {
 		parts.push(agent.systemPrompt);
 		parts.push("");
+	}
+
+	// Include project context files (AGENTS.md, CLAUDE.md)
+	if (contextFiles && contextFiles.length > 0) {
+		parts.push("## Project Context\n");
+		parts.push("Project-specific instructions and guidelines:\n");
+		for (const { path: filePath, content } of contextFiles) {
+			parts.push(`### ${filePath}\n\n${content}\n`);
+		}
 	}
 
 	parts.push("## Output Guidelines");
@@ -208,6 +223,7 @@ export function createAgentToolDefinition(
 		streamFn,
 		getApiKey,
 		model,
+		contextFiles,
 		currentDepth = 0,
 		maxDepth = 3,
 	} = options;
@@ -326,6 +342,7 @@ export function createAgentToolDefinition(
 					streamFn,
 					getApiKey,
 					model: resolvedModel,
+					contextFiles,
 					currentDepth: currentDepth + 1,
 					maxDepth,
 				});
@@ -333,7 +350,7 @@ export function createAgentToolDefinition(
 			}
 
 			// Build system prompt
-			const systemPrompt = buildAgentSystemPrompt(agentDef, cwd);
+			const systemPrompt = buildAgentSystemPrompt(agentDef, cwd, contextFiles);
 
 			// Build the full prompt for the agent
 			let fullTask = task;

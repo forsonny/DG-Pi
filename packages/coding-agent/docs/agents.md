@@ -44,9 +44,24 @@ Disable discovery with `--no-agents` (explicit `--agent` paths still load).
 2. Available agents are listed in the system prompt as an XML `<available_agents>` block
 3. The LLM invokes the `agent` tool with an agent name, task description, and optional context
 4. Each agent runs as an isolated Agent instance with its own conversation, system prompt, and tools
-5. Results are returned to the parent with usage stats: `[Agent: name | N turns | N tokens]`
+5. Project context files (AGENTS.md, CLAUDE.md) are included in the subagent's system prompt
+6. Progress is streamed to the parent (turn count, current tool, token usage)
+7. Results are returned with usage stats: `[Agent: name | N turns | N tokens | duration]`
+8. The user can press Escape to abort a running agent (abort propagates to subagent)
 
 This keeps the parent conversation focused while delegating well-scoped work to specialized subagents.
+
+### Agent Tool Parameters
+
+When the LLM invokes the `agent` tool, it provides:
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `agent` | Yes | Name of the agent type (from `<available_agents>`) |
+| `task` | Yes | Detailed task description |
+| `description` | No | Short (3-5 word) summary of what the agent will do |
+| `context` | No | Additional context (file contents, prior findings) |
+| `model` | No | Model override for this invocation (e.g. `"anthropic/claude-sonnet-4"`) |
 
 ## Agent Commands
 
