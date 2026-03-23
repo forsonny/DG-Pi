@@ -3974,7 +3974,7 @@ export class InteractiveMode {
 		const loader = new BorderedLoader(
 			this.ui,
 			theme,
-			"Reloading keybindings, extensions, skills, prompts, themes...",
+			"Reloading keybindings, extensions, skills, agents, prompts, themes...",
 			{
 				cancellable: false,
 			},

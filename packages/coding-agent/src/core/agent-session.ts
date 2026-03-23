@@ -2259,20 +2259,8 @@ export class AgentSession {
 			}
 		}
 
-		// Add agent tool to base definitions if agents are available
-		if (agentDefRegistry.size > 0) {
-			const agentToolDef = createAgentToolDefinition({
-				cwd: this._cwd,
-				agentRegistry: agentDefRegistry,
-				parentToolDefinitions: this._baseToolDefinitions,
-				streamFn: this.agent.streamFn,
-				getApiKey: this.agent.getApiKey,
-				model: this.agent.state.model,
-			});
-			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
-		} else {
-			this._baseToolDefinitions.delete("agent");
-		}
+		// Remove any previous agent tool before rebuilding
+		this._baseToolDefinitions.delete("agent");
 
 		const registeredTools = this._extensionRunner?.getAllRegisteredTools() ?? [];
 		const allCustomTools = [
@@ -2282,6 +2270,8 @@ export class AgentSession {
 				sourceInfo: createSyntheticSourceInfo(`<sdk:${definition.name}>`, { source: "sdk" }),
 			})),
 		];
+
+		// Build full definition registry (base + extension + custom) WITHOUT agent tool first
 		const definitionRegistry = new Map<string, ToolDefinitionEntry>(
 			Array.from(this._baseToolDefinitions.entries()).map(([name, definition]) => [
 				name,
@@ -2295,6 +2285,27 @@ export class AgentSession {
 			definitionRegistry.set(tool.definition.name, {
 				definition: tool.definition,
 				sourceInfo: tool.sourceInfo,
+			});
+		}
+
+		// Now create agent tool with the FULL tool set (base + extension + custom)
+		// so subagents can access extension-registered tools
+		if (agentDefRegistry.size > 0) {
+			const allToolDefs = new Map(
+				Array.from(definitionRegistry.entries()).map(([name, entry]) => [name, entry.definition]),
+			);
+			const agentToolDef = createAgentToolDefinition({
+				cwd: this._cwd,
+				agentRegistry: agentDefRegistry,
+				parentToolDefinitions: allToolDefs,
+				streamFn: this.agent.streamFn,
+				getApiKey: this.agent.getApiKey,
+				model: this.agent.state.model,
+			});
+			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
+			definitionRegistry.set("agent", {
+				definition: agentToolDef as unknown as ToolDefinition,
+				sourceInfo: createSyntheticSourceInfo("<builtin:agent>", { source: "builtin" }),
 			});
 		}
 		this._toolDefinitions = definitionRegistry;

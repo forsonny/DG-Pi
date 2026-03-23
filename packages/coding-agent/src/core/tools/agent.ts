@@ -4,8 +4,11 @@ import {
 	type AgentMessage,
 	type AgentTool,
 	type StreamFn,
+	type ThinkingLevel,
 } from "@dg-forsonny/dg-pi-agent-core";
 import type { AssistantMessage, Model, TextContent } from "@dg-forsonny/dg-pi-ai";
+import { getModel } from "@dg-forsonny/dg-pi-ai";
+import { Text } from "@dg-forsonny/dg-pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import type { AgentDefinition } from "../agents.js";
 import type { ToolDefinition } from "../extensions/types.js";
@@ -18,8 +21,12 @@ import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 const agentSchema = Type.Object({
 	agent: Type.String({ description: "Name of the agent type to spawn (from available_agents list)" }),
 	task: Type.String({ description: "Detailed task description / prompt for the agent" }),
+	description: Type.Optional(Type.String({ description: "Short (3-5 word) summary of what the agent will do" })),
 	context: Type.Optional(
 		Type.String({ description: "Optional additional context to include (file contents, prior findings, etc.)" }),
+	),
+	model: Type.Optional(
+		Type.String({ description: "Optional model override for this agent (e.g. 'anthropic/claude-sonnet-4')" }),
 	),
 });
 
@@ -27,10 +34,25 @@ export type AgentToolInput = Static<typeof agentSchema>;
 
 export interface AgentToolDetails {
 	agentName: string;
+	description?: string;
 	turns: number;
 	totalTokens: number;
 	cost: number;
+	status: "success" | "error" | "aborted" | "max-turns";
+	durationMs: number;
 }
+
+// ============================================================================
+// Render state
+// ============================================================================
+
+type AgentRenderState = {
+	startedAt: number | undefined;
+	endedAt: number | undefined;
+	turns: number;
+	status: string;
+	interval: NodeJS.Timeout | undefined;
+};
 
 // ============================================================================
 // Options
@@ -41,7 +63,7 @@ export interface AgentToolOptions {
 	cwd: string;
 	/** Registry of available agent definitions */
 	agentRegistry: Map<string, AgentDefinition>;
-	/** Parent's tool definitions (for tool inheritance) */
+	/** Parent's FULL tool definitions (base + extension + custom) */
 	parentToolDefinitions: Map<string, ToolDefinition>;
 	/** Stream function inherited from parent */
 	streamFn: StreamFn;
@@ -84,6 +106,37 @@ function buildAgentSystemPrompt(agent: AgentDefinition, cwd: string): string {
 }
 
 // ============================================================================
+// Model resolution
+// ============================================================================
+
+function resolveModel(modelSpec: string | undefined, fallback: Model<any>): Model<any> {
+	if (!modelSpec) return fallback;
+
+	// Format: "provider/model-id"
+	const slashIndex = modelSpec.indexOf("/");
+	if (slashIndex === -1) return fallback;
+
+	const provider = modelSpec.slice(0, slashIndex);
+	const modelId = modelSpec.slice(slashIndex + 1);
+
+	try {
+		const resolved = getModel(provider as any, modelId as any);
+		if (resolved) return resolved;
+	} catch {
+		// Fall through to default
+	}
+	return fallback;
+}
+
+function resolveThinkingLevel(level: string | undefined): ThinkingLevel {
+	const valid: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+	if (level && valid.includes(level as ThinkingLevel)) {
+		return level as ThinkingLevel;
+	}
+	return "off";
+}
+
+// ============================================================================
 // Token aggregation
 // ============================================================================
 
@@ -105,7 +158,6 @@ function aggregateUsage(messages: AgentMessage[]): { totalTokens: number; cost: 
 }
 
 function extractFinalText(messages: AgentMessage[]): string {
-	// Walk backwards to find the last assistant message with text content
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i];
 		if (msg.role === "assistant" && "content" in msg) {
@@ -121,12 +173,34 @@ function extractFinalText(messages: AgentMessage[]): string {
 }
 
 // ============================================================================
+// Duration formatting
+// ============================================================================
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`;
+	return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// ============================================================================
+// Render helpers
+// ============================================================================
+
+function formatAgentCall(args: AgentToolInput | undefined): string {
+	if (!args) return "agent (unknown)";
+	const name = args.agent ?? "unknown";
+	const desc = args.description ? ` -- ${args.description}` : "";
+	const task = args.task ?? "";
+	const preview = task.length > 80 ? `${task.slice(0, 77)}...` : task;
+	return `agent:${name}${desc}${preview ? `\n${preview}` : ""}`;
+}
+
+// ============================================================================
 // Tool definition factory
 // ============================================================================
 
 export function createAgentToolDefinition(
 	options: AgentToolOptions,
-): ToolDefinition<typeof agentSchema, AgentToolDetails> {
+): ToolDefinition<typeof agentSchema, AgentToolDetails, AgentRenderState> {
 	const {
 		cwd,
 		agentRegistry,
@@ -142,22 +216,40 @@ export function createAgentToolDefinition(
 		name: "agent",
 		label: "Agent",
 		description:
-			"Spawn an autonomous subagent to handle a focused task independently. " +
-			"The agent runs with its own conversation context and returns results when done. " +
-			"Use agents for tasks that benefit from focused, independent work -- such as " +
-			"codebase exploration, planning, research, writing, or code implementation. " +
-			"Prefer doing simple tasks yourself rather than spawning an agent.",
-		promptSnippet: "Spawn autonomous subagents for parallel or specialized work",
+			"Launch a new agent to handle a focused task autonomously. " +
+			"The agent runs with its own conversation context and tool access, returning results when done.\n\n" +
+			"Available agent types are listed in <available_agents> in the system prompt. Each agent has a " +
+			"specific tool set and purpose. Use the agent best suited for the task:\n" +
+			"- explore: Fast read-only codebase/document exploration\n" +
+			"- plan: Architecture analysis and implementation planning\n" +
+			"- research: Information gathering and synthesis\n" +
+			"- writer: Long-form content and documentation creation\n" +
+			"- code: Focused code implementation with full tool access\n\n" +
+			"When NOT to use agents:\n" +
+			"- Simple, quick tasks you can do directly (reading a file, running a command)\n" +
+			"- Tasks requiring back-and-forth with the user\n" +
+			"- Tasks that depend on the current conversation context (agents start fresh)",
+		promptSnippet: "Launch autonomous subagents for parallel or specialized work",
 		promptGuidelines: [
-			"Use the agent tool when a task is well-scoped and benefits from focused, independent work",
-			"Prefer doing simple, quick tasks yourself rather than spawning an agent",
-			"Provide detailed task descriptions so the agent has full context",
-			"Check <available_agents> in the system prompt for the list of agent types",
+			"Use agents when a task is well-scoped and benefits from focused, independent work",
+			"Prefer doing simple tasks yourself -- only spawn agents for substantial, self-contained work",
+			"Provide detailed task descriptions with full context so the agent can work independently",
+			"You can launch multiple agents in parallel by making multiple agent tool calls in one response",
+			"Each agent starts with a fresh conversation -- it cannot see your prior messages or context",
+			"Check <available_agents> in the system prompt for available agent types and their tools",
+			"Use the explore agent for codebase questions, plan agent for design work, code agent for implementation",
 		],
 		parameters: agentSchema,
 
-		async execute(_toolCallId, params, _signal) {
-			const { agent: agentName, task, context: additionalContext } = params;
+		async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+			const {
+				agent: agentName,
+				task,
+				context: additionalContext,
+				model: modelOverride,
+				description: taskDesc,
+			} = params;
+			const startedAt = Date.now();
 
 			// Validate agent exists
 			const agentDef = agentRegistry.get(agentName);
@@ -170,7 +262,14 @@ export function createAgentToolDefinition(
 							text: `Error: Unknown agent "${agentName}". Available agents: ${available || "(none)"}`,
 						},
 					],
-					details: { agentName, turns: 0, totalTokens: 0, cost: 0 },
+					details: {
+						agentName,
+						turns: 0,
+						totalTokens: 0,
+						cost: 0,
+						status: "error" as const,
+						durationMs: Date.now() - startedAt,
+					},
 				};
 			}
 
@@ -183,14 +282,26 @@ export function createAgentToolDefinition(
 							text: `Error: Maximum agent nesting depth (${maxDepth}) reached. Cannot spawn more subagents.`,
 						},
 					],
-					details: { agentName, turns: 0, totalTokens: 0, cost: 0 },
+					details: {
+						agentName,
+						turns: 0,
+						totalTokens: 0,
+						cost: 0,
+						status: "error" as const,
+						durationMs: Date.now() - startedAt,
+					},
 				};
 			}
 
-			// Resolve tools for the subagent
+			// Resolve model: per-invocation override > agent definition > parent model
+			const resolvedModel = resolveModel(modelOverride, resolveModel(agentDef.model, model));
+
+			// Resolve thinking level from agent definition
+			const resolvedThinking = resolveThinkingLevel(agentDef.thinking);
+
+			// Resolve tools for the subagent (from FULL parent tool set including extensions)
 			const subagentTools: AgentTool[] = [];
 			if (agentDef.tools && agentDef.tools.length > 0) {
-				// Use only the tools in the agent's allowlist that exist in the parent
 				for (const toolName of agentDef.tools) {
 					const toolDef = parentToolDefinitions.get(toolName);
 					if (toolDef) {
@@ -198,7 +309,6 @@ export function createAgentToolDefinition(
 					}
 				}
 			} else {
-				// Inherit all parent tools except the agent tool itself
 				for (const [name, toolDef] of parentToolDefinitions) {
 					if (name !== "agent") {
 						subagentTools.push(wrapToolDefinition(toolDef));
@@ -215,7 +325,7 @@ export function createAgentToolDefinition(
 					parentToolDefinitions,
 					streamFn,
 					getApiKey,
-					model,
+					model: resolvedModel,
 					currentDepth: currentDepth + 1,
 					maxDepth,
 				});
@@ -231,12 +341,12 @@ export function createAgentToolDefinition(
 				fullTask += `\n\n## Additional Context\n${additionalContext}`;
 			}
 
-			// Create and run the subagent
+			// Create the subagent
 			const subagent = new Agent({
 				initialState: {
 					systemPrompt,
-					model,
-					thinkingLevel: "off",
+					model: resolvedModel,
+					thinkingLevel: resolvedThinking,
 					tools: subagentTools,
 					messages: [],
 				},
@@ -245,55 +355,199 @@ export function createAgentToolDefinition(
 				toolExecution: "parallel",
 			});
 
-			// Track turns
+			// Track turns and stream progress
 			let turns = 0;
+			let aborted = false;
+			let maxTurnsReached = false;
+
 			subagent.subscribe((event: AgentEvent) => {
 				if (event.type === "turn_end") {
 					turns++;
+
+					// Enforce max turns
+					if (turns >= agentDef.maxTurns) {
+						maxTurnsReached = true;
+						subagent.abort();
+					}
+
+					// Stream progress update to parent
+					const usage = aggregateUsage(subagent.state.messages);
+					onUpdate?.({
+						content: [
+							{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | ${usage.totalTokens} tokens]` },
+						],
+						details: {
+							agentName,
+							description: taskDesc,
+							turns,
+							totalTokens: usage.totalTokens,
+							cost: usage.cost,
+							status: "success" as const,
+							durationMs: Date.now() - startedAt,
+						},
+					});
+				}
+
+				if (event.type === "tool_execution_start") {
+					onUpdate?.({
+						content: [
+							{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | running ${event.toolName}...]` },
+						],
+						details: {
+							agentName,
+							description: taskDesc,
+							turns,
+							totalTokens: 0,
+							cost: 0,
+							status: "success" as const,
+							durationMs: Date.now() - startedAt,
+						},
+					});
 				}
 			});
 
-			try {
-				// Run the agent with the task
-				await subagent.prompt(fullTask);
+			// Propagate abort signal from parent
+			if (signal) {
+				const onAbort = () => {
+					aborted = true;
+					subagent.abort();
+				};
+				if (signal.aborted) {
+					onAbort();
+				} else {
+					signal.addEventListener("abort", onAbort, { once: true });
+				}
+			}
 
-				// Wait for completion
+			try {
+				await subagent.prompt(fullTask);
 				await subagent.waitForIdle();
 
-				// Enforce max turns by checking if we exceeded (the agent loop itself doesn't limit turns,
-				// but we can report it)
 				const messages = subagent.state.messages;
 				const finalText = extractFinalText(messages);
 				const usage = aggregateUsage(messages);
+				const durationMs = Date.now() - startedAt;
 
-				const header = `[Agent: ${agentName} | ${turns} turns | ${usage.totalTokens} tokens]`;
+				let status: AgentToolDetails["status"] = "success";
+				let headerNote = "";
+				if (aborted) {
+					status = "aborted";
+					headerNote = " (aborted)";
+				} else if (maxTurnsReached) {
+					status = "max-turns";
+					headerNote = ` (stopped at ${agentDef.maxTurns} turn limit)`;
+				}
+
+				const header = `[Agent: ${agentName} | ${turns} turns | ${usage.totalTokens} tokens | ${formatDuration(durationMs)}${headerNote}]`;
 
 				return {
-					content: [
-						{
-							type: "text",
-							text: `${header}\n\n${finalText}`,
-						},
-					],
+					content: [{ type: "text", text: `${header}\n\n${finalText}` }],
 					details: {
 						agentName,
+						description: taskDesc,
 						turns,
 						totalTokens: usage.totalTokens,
 						cost: usage.cost,
+						status,
+						durationMs,
 					},
 				};
 			} catch (error) {
+				const durationMs = Date.now() - startedAt;
+				// Include partial results if available
+				const messages = subagent.state.messages;
+				const partialText = messages.length > 0 ? extractFinalText(messages) : undefined;
+				const usage = messages.length > 0 ? aggregateUsage(messages) : { totalTokens: 0, cost: 0 };
+
 				const errorMsg = error instanceof Error ? error.message : String(error);
+				const status: AgentToolDetails["status"] = aborted ? "aborted" : "error";
+				const header = `[Agent: ${agentName} | ${status.toUpperCase()} | ${turns} turns | ${formatDuration(durationMs)}]`;
+				const body = partialText
+					? `${errorMsg}\n\n## Partial results before ${status}:\n\n${partialText}`
+					: errorMsg;
+
 				return {
-					content: [
-						{
-							type: "text",
-							text: `[Agent: ${agentName} | ERROR]\n\n${errorMsg}`,
-						},
-					],
-					details: { agentName, turns, totalTokens: 0, cost: 0 },
+					content: [{ type: "text", text: `${header}\n\n${body}` }],
+					details: {
+						agentName,
+						description: taskDesc,
+						turns,
+						totalTokens: usage.totalTokens,
+						cost: usage.cost,
+						status,
+						durationMs,
+					},
 				};
 			}
+		},
+
+		renderCall(args, _theme, context) {
+			const state = context.state;
+			if (context.executionStarted && state.startedAt === undefined) {
+				state.startedAt = Date.now();
+				state.endedAt = undefined;
+				state.turns = 0;
+				state.status = "running";
+			}
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			text.setText(formatAgentCall(args));
+			return text;
+		},
+
+		renderResult(result, options, _theme, context) {
+			const state = context.state;
+			const details = result.details as AgentToolDetails | undefined;
+
+			// Update state from details
+			if (details) {
+				state.turns = details.turns;
+				state.status = details.status;
+			}
+
+			// Live timer while streaming
+			if (state.startedAt !== undefined && options.isPartial && !state.interval) {
+				state.interval = setInterval(() => context.invalidate(), 1000);
+			}
+			if (!options.isPartial || context.isError) {
+				state.endedAt ??= Date.now();
+				if (state.interval) {
+					clearInterval(state.interval);
+					state.interval = undefined;
+				}
+			}
+
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+
+			// Build status line
+			const parts: string[] = [];
+			if (details) {
+				parts.push(`${details.turns} turns`);
+				if (details.totalTokens > 0) parts.push(`${details.totalTokens} tokens`);
+				const elapsed = state.endedAt
+					? formatDuration(state.endedAt - (state.startedAt ?? state.endedAt))
+					: state.startedAt
+						? formatDuration(Date.now() - state.startedAt)
+						: "";
+				if (elapsed) parts.push(elapsed);
+				if (details.status !== "success") parts.push(details.status);
+			}
+			const statusLine = parts.length > 0 ? `[${parts.join(" | ")}]\n` : "";
+
+			// Get text content
+			const textContent = result.content
+				.filter((c): c is TextContent => c.type === "text")
+				.map((c) => c.text)
+				.join("\n");
+
+			if (options.expanded || options.isPartial) {
+				text.setText(`${statusLine}${textContent}`);
+			} else {
+				// Collapsed: show just the status line + first line of output
+				const firstLine = textContent.split("\n").find((l) => l.trim()) ?? "";
+				const preview = firstLine.length > 100 ? `${firstLine.slice(0, 97)}...` : firstLine;
+				text.setText(`${statusLine}${preview}`);
+			}
+			return text;
 		},
 	};
 }
