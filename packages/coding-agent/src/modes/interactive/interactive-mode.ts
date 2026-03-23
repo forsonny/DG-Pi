@@ -1001,6 +1001,7 @@ export class InteractiveMode {
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
 
 		const skillsResult = this.session.resourceLoader.getSkills();
+		const agentDefsResult = this.session.resourceLoader.getAgentDefinitions();
 		const promptsResult = this.session.resourceLoader.getPrompts();
 		const themesResult = this.session.resourceLoader.getThemes();
 		const extensions =
@@ -1052,6 +1053,19 @@ export class InteractiveMode {
 					formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
 				});
 				this.chatContainer.addChild(new Text(`${sectionHeader("Skills")}\n${skillList}`, 0, 0));
+				this.chatContainer.addChild(new Spacer(1));
+			}
+
+			const agentDefs = agentDefsResult.agents;
+			if (agentDefs.length > 0) {
+				const groups = this.buildScopeGroups(
+					agentDefs.map((agent) => ({ path: agent.filePath, sourceInfo: agent.sourceInfo })),
+				);
+				const agentList = this.formatScopeGroups(groups, {
+					formatPath: (item) => this.formatDisplayPath(item.path),
+					formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
+				});
+				this.chatContainer.addChild(new Text(`${sectionHeader("Agents")}\n${agentList}`, 0, 0));
 				this.chatContainer.addChild(new Spacer(1));
 			}
 
