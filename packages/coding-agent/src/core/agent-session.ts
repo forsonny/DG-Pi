@@ -916,9 +916,10 @@ export class AgentSession {
 			}
 		}
 
-		// Expand skill commands (/skill:name args) and prompt templates (/template args)
+		// Expand skill/agent commands and prompt templates
 		let expandedText = currentText;
 		if (expandPromptTemplates) {
+			expandedText = this._expandAgentCommand(expandedText);
 			expandedText = this._expandSkillCommand(expandedText);
 			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 		}
@@ -1058,6 +1059,29 @@ export class AgentSession {
 	}
 
 	/**
+	 * Expand agent commands (/agent:name args) to a prompt that invokes the agent tool.
+	 * Returns the expanded text, or the original text if not an agent command or agent not found.
+	 */
+	private _expandAgentCommand(text: string): string {
+		if (!text.startsWith("/agent:")) return text;
+
+		const spaceIndex = text.indexOf(" ");
+		const agentName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
+		const task = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+
+		const agents = this._resourceLoader.getAgentDefinitions().agents;
+		const agent = agents.find((a) => a.name === agentName);
+		if (!agent) return text; // Unknown agent, pass through
+
+		if (!task) {
+			// No task provided, list the agent's info
+			return `Describe the "${agent.name}" agent: ${agent.description}`;
+		}
+
+		return `Use the "${agent.name}" agent for the following task:\n\n${task}`;
+	}
+
+	/**
 	 * Expand skill commands (/skill:name args) to their full content.
 	 * Returns the expanded text, or the original text if not a skill command or skill not found.
 	 * Emits errors via extension runner if file read fails.
@@ -1102,8 +1126,9 @@ export class AgentSession {
 			this._throwIfExtensionCommand(text);
 		}
 
-		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(text);
+		// Expand agent/skill commands and prompt templates
+		let expandedText = this._expandAgentCommand(text);
+		expandedText = this._expandSkillCommand(expandedText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueSteer(expandedText, images);
@@ -1122,8 +1147,9 @@ export class AgentSession {
 			this._throwIfExtensionCommand(text);
 		}
 
-		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(text);
+		// Expand agent/skill commands and prompt templates
+		let expandedText = this._expandAgentCommand(text);
+		expandedText = this._expandSkillCommand(expandedText);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueFollowUp(expandedText, images);

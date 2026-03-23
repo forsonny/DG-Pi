@@ -48,6 +48,25 @@ Disable discovery with `--no-agents` (explicit `--agent` paths still load).
 
 This keeps the parent conversation focused while delegating well-scoped work to specialized subagents.
 
+## Agent Commands
+
+Agents register as `/agent:name` commands:
+
+```bash
+/agent:explore Find all API endpoint definitions    # Invoke explore agent with task
+/agent:plan Design a caching layer for the API      # Invoke plan agent with task
+```
+
+The command expands into a prompt that instructs the LLM to use the `agent` tool with the named agent.
+
+Toggle agent commands via `/settings` in interactive mode or in `settings.json`:
+
+```json
+{
+  "enableAgentCommands": true
+}
+```
+
 ## Built-in Agents
 
 | Agent | Description | Tools |

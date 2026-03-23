@@ -85,6 +85,7 @@ export interface Settings {
 	prompts?: string[]; // Array of local prompt template paths or directories
 	themes?: string[]; // Array of local theme file paths or directories
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
+	enableAgentCommands?: boolean; // default: true - register agents as /agent:name commands
 	terminal?: TerminalSettings;
 	images?: ImageSettings;
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
@@ -840,6 +841,16 @@ export class SettingsManager {
 	setEnableSkillCommands(enabled: boolean): void {
 		this.globalSettings.enableSkillCommands = enabled;
 		this.markModified("enableSkillCommands");
+		this.save();
+	}
+
+	getEnableAgentCommands(): boolean {
+		return this.settings.enableAgentCommands ?? true;
+	}
+
+	setEnableAgentCommands(enabled: boolean): void {
+		this.globalSettings.enableAgentCommands = enabled;
+		this.markModified("enableAgentCommands");
 		this.save();
 	}
 

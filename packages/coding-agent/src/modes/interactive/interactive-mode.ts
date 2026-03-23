@@ -189,6 +189,8 @@ export class InteractiveMode {
 
 	// Skill commands: command name -> skill file path
 	private skillCommands = new Map<string, string>();
+	// Agent commands: command name -> agent name
+	private agentCommands = new Map<string, string>();
 
 	// Agent subscription unsubscribe function
 	private unsubscribe?: () => void;
@@ -408,9 +410,23 @@ export class InteractiveMode {
 			}
 		}
 
+		// Build agent commands from session.agents (if enabled)
+		this.agentCommands.clear();
+		const agentCommandList: SlashCommand[] = [];
+		if (this.settingsManager.getEnableAgentCommands()) {
+			for (const agent of this.session.resourceLoader.getAgentDefinitions().agents) {
+				const commandName = `agent:${agent.name}`;
+				this.agentCommands.set(commandName, agent.name);
+				agentCommandList.push({
+					name: commandName,
+					description: this.prefixAutocompleteDescription(agent.description, agent.sourceInfo),
+				});
+			}
+		}
+
 		// Setup autocomplete
 		this.autocompleteProvider = new CombinedAutocompleteProvider(
-			[...slashCommands, ...templateCommands, ...extensionCommands, ...skillCommandList],
+			[...slashCommands, ...templateCommands, ...extensionCommands, ...skillCommandList, ...agentCommandList],
 			process.cwd(),
 			fdPath,
 		);
@@ -3254,6 +3270,7 @@ export class InteractiveMode {
 					autoResizeImages: this.settingsManager.getImageAutoResize(),
 					blockImages: this.settingsManager.getBlockImages(),
 					enableSkillCommands: this.settingsManager.getEnableSkillCommands(),
+					enableAgentCommands: this.settingsManager.getEnableAgentCommands(),
 					steeringMode: this.session.steeringMode,
 					followUpMode: this.session.followUpMode,
 					transport: this.settingsManager.getTransport(),
@@ -3292,6 +3309,10 @@ export class InteractiveMode {
 					},
 					onEnableSkillCommandsChange: (enabled) => {
 						this.settingsManager.setEnableSkillCommands(enabled);
+						this.setupAutocomplete(this.fdPath);
+					},
+					onEnableAgentCommandsChange: (enabled) => {
+						this.settingsManager.setEnableAgentCommands(enabled);
 						this.setupAutocomplete(this.fdPath);
 					},
 					onSteeringModeChange: (mode) => {
