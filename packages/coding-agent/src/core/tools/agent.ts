@@ -266,6 +266,8 @@ export function createAgentToolDefinition(
 		description:
 			"Launch a new agent to handle a focused task autonomously. " +
 			"The agent runs with its own conversation context and tool access, returning results when done.\n\n" +
+			"IMPORTANT: When the user asks you to use a specific agent (e.g. 'use the explore agent', " +
+			"'spawn the code agent', 'have the plan agent...'), you MUST use this tool. Do not do the work yourself.\n\n" +
 			"Available agent types are listed in <available_agents> in the system prompt. Each agent has a " +
 			"specific tool set and purpose. Use the agent best suited for the task:\n" +
 			"- explore: Fast read-only codebase/document exploration\n" +
@@ -273,14 +275,18 @@ export function createAgentToolDefinition(
 			"- research: Information gathering and synthesis\n" +
 			"- writer: Long-form content and documentation creation\n" +
 			"- code: Focused code implementation with full tool access\n\n" +
+			"When to use agents without being asked:\n" +
+			"- Complex, multi-step tasks that benefit from focused work\n" +
+			"- Tasks that can run in parallel with other work\n" +
+			"- Tasks outside your primary expertise (e.g. research while coding)\n\n" +
 			"When NOT to use agents:\n" +
-			"- Simple, quick tasks you can do directly (reading a file, running a command)\n" +
 			"- Tasks requiring back-and-forth with the user\n" +
 			"- Tasks that depend on the current conversation context (agents start fresh)",
 		promptSnippet: "Launch autonomous subagents for parallel or specialized work",
 		promptGuidelines: [
+			"CRITICAL: When the user explicitly asks to use an agent by name, ALWAYS use this tool. Never do the work yourself instead.",
 			"Use agents when a task is well-scoped and benefits from focused, independent work",
-			"Prefer doing simple tasks yourself -- only spawn agents for substantial, self-contained work",
+			"For simple tasks where no agent is requested, you may do the work directly",
 			"Provide detailed task descriptions with full context so the agent can work independently",
 			"You can launch multiple agents in parallel by making multiple agent tool calls in one response",
 			"Each agent starts with a fresh conversation -- it cannot see your prior messages or context",

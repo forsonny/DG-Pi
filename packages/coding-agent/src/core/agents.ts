@@ -363,8 +363,8 @@ export function formatAgentsForPrompt(agents: AgentDefinition[]): string {
 
 	const lines = [
 		"\n\nThe following agents can be spawned via the agent tool for autonomous subtasks.",
-		"Use agents when a task is well-scoped and can benefit from focused, independent work.",
-		"Prefer doing simple tasks yourself rather than spawning an agent.",
+		"When the user asks you to use a specific agent by name, you MUST use the agent tool. Do not do the work yourself.",
+		"For tasks where no agent is requested, use your judgment on whether to delegate or handle directly.",
 		"",
 		"<available_agents>",
 	];
