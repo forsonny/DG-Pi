@@ -18,6 +18,7 @@ import type { AgentDefinition } from "../src/core/agents.js";
 import type { ToolDefinition } from "../src/core/extensions/types.js";
 import { createSyntheticSourceInfo } from "../src/core/source-info.js";
 import { createAgentToolDefinition } from "../src/core/tools/agent.js";
+import { AgentTracker } from "../src/core/tools/agent-tracker.js";
 
 // ============================================================================
 // Mock helpers
@@ -730,6 +731,100 @@ describe("agent tool", () => {
 
 			expect(result.details.totalTokens).toBe(150); // From mock message usage
 			expect(result.details.cost).toBeGreaterThan(0);
+		});
+	});
+
+	describe("background execution", () => {
+		it("should return immediately with agent ID when run_in_background is true", async () => {
+			const tracker = new AgentTracker();
+			const toolDef = createAgentToolDefinition(createBaseOptions({ agentTracker: tracker }));
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it", run_in_background: true },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			const text = (result.content[0] as TextContent).text;
+			expect(text).toContain("Background agent started");
+			expect(text).toContain("agent-1");
+			expect(result.details.status).toBe("success");
+			expect(result.details.durationMs).toBe(0); // Returned immediately
+
+			// Wait for background agent to finish
+			const tracked = tracker.get("agent-1");
+			expect(tracked).toBeDefined();
+			await tracked!.promise;
+			expect(tracked!.status).not.toBe("running");
+
+			tracker.dispose();
+		});
+
+		it("should track multiple background agents", async () => {
+			const tracker = new AgentTracker();
+			const toolDef = createAgentToolDefinition(createBaseOptions({ agentTracker: tracker }));
+
+			await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Task 1", run_in_background: true },
+				undefined,
+				undefined,
+				{} as any,
+			);
+			await toolDef.execute(
+				"call-2",
+				{ agent: "test-agent", task: "Task 2", run_in_background: true },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			expect(tracker.getAll()).toHaveLength(2);
+			expect(tracker.get("agent-1")).toBeDefined();
+			expect(tracker.get("agent-2")).toBeDefined();
+
+			// Wait for both to finish
+			await tracker.get("agent-1")!.promise;
+			await tracker.get("agent-2")!.promise;
+
+			tracker.dispose();
+		});
+
+		it("should run foreground when run_in_background is false", async () => {
+			const tracker = new AgentTracker();
+			const toolDef = createAgentToolDefinition(createBaseOptions({ agentTracker: tracker }));
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it", run_in_background: false },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			// Should have full result (not a background stub)
+			const text = (result.content[0] as TextContent).text;
+			expect(text).toContain("Agent completed the task.");
+			expect(tracker.getAll()).toHaveLength(0); // Not tracked
+			tracker.dispose();
+		});
+
+		it("should run foreground when no tracker provided", async () => {
+			const toolDef = createAgentToolDefinition(createBaseOptions());
+
+			const result = await toolDef.execute(
+				"call-1",
+				{ agent: "test-agent", task: "Do it", run_in_background: true },
+				undefined,
+				undefined,
+				{} as any,
+			);
+
+			// Falls through to foreground since no tracker
+			const text = (result.content[0] as TextContent).text;
+			expect(text).toContain("Agent completed the task.");
 		});
 	});
 });

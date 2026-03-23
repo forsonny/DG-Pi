@@ -81,6 +81,8 @@ import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createAgentToolDefinition } from "./tools/agent.js";
+import { createAgentStatusToolDefinition } from "./tools/agent-status.js";
+import { AgentTracker } from "./tools/agent-tracker.js";
 import type { BashOperations } from "./tools/bash.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
@@ -269,6 +271,7 @@ export class AgentSession {
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _cwd: string;
+	private _agentTracker = new AgentTracker();
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
@@ -674,6 +677,7 @@ export class AgentSession {
 	dispose(): void {
 		this._disconnectFromAgent();
 		this._eventListeners = [];
+		this._agentTracker.dispose();
 	}
 
 	// =========================================================================
@@ -2304,11 +2308,22 @@ export class AgentSession {
 				model: this.agent.state.model,
 				contextFiles: this._resourceLoader.getAgentsFiles().agentsFiles,
 				defaultMaxCost: this.settingsManager.getDefaultAgentMaxCost(),
+				agentTracker: this._agentTracker,
 			});
 			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
 			definitionRegistry.set("agent", {
 				definition: agentToolDef as unknown as ToolDefinition,
 				sourceInfo: createSyntheticSourceInfo("<builtin:agent>", { source: "builtin" }),
+			});
+
+			// Register agent_status companion tool
+			const agentStatusToolDef = createAgentStatusToolDefinition({
+				agentTracker: this._agentTracker,
+			});
+			this._baseToolDefinitions.set("agent_status", agentStatusToolDef as unknown as ToolDefinition);
+			definitionRegistry.set("agent_status", {
+				definition: agentStatusToolDef as unknown as ToolDefinition,
+				sourceInfo: createSyntheticSourceInfo("<builtin:agent_status>", { source: "builtin" }),
 			});
 		}
 		this._toolDefinitions = definitionRegistry;

@@ -13,6 +13,7 @@ Agents are autonomous subagents that the main agent spawns for focused, independ
 - [Frontmatter](#frontmatter)
 - [Validation](#validation)
 - [Extension Registration](#extension-registration)
+- [Background Execution](#background-execution)
 - [Nesting](#nesting)
 - [Example](#example)
 - [Agents vs Skills](#agents-vs-skills)
@@ -63,6 +64,7 @@ When the LLM invokes the `agent` tool, it provides:
 | `context` | No | Additional context (file contents, prior findings) |
 | `model` | No | Model override for this invocation (e.g. `"anthropic/claude-sonnet-4"`) |
 | `maxCost` | No | Maximum cost in dollars. Overrides agent and global defaults |
+| `run_in_background` | No | When true, returns immediately with agent ID for async execution |
 
 ## Agent Commands
 
@@ -215,6 +217,26 @@ All fields from the `AgentRegistration` interface:
 | `maxTurns` | No | Max turns. Default: 50. |
 | `maxNesting` | No | Max sub-agent nesting depth. Default: 0. |
 | `disableModelInvocation` | No | If true, hidden from system prompt. |
+
+## Background Execution
+
+Agents can run in the background by setting `run_in_background: true` in the agent tool call. The tool returns immediately with an agent ID while the agent continues working asynchronously.
+
+Use the `agent_status` tool to interact with background agents:
+
+| Action | Description |
+|--------|-------------|
+| `list` | List all tracked agents with status |
+| `check` | Get status or full result of a specific agent |
+| `abort` | Cancel a running background agent |
+
+```
+agent_status { action: "list" }
+agent_status { agent_id: "agent-1", action: "check" }
+agent_status { agent_id: "agent-1", action: "abort" }
+```
+
+Background agents respect the same cost limits, max turns, and abort signals as foreground agents. Up to 50 agents can be tracked per session.
 
 ## Nesting
 

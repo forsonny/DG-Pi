@@ -6,6 +6,13 @@ export {
 	createAgentToolDefinition,
 } from "./agent.js";
 export {
+	type AgentStatusDetails,
+	type AgentStatusInput,
+	type AgentStatusToolOptions,
+	createAgentStatusToolDefinition,
+} from "./agent-status.js";
+export { AgentTracker, type TrackedAgent } from "./agent-tracker.js";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,

@@ -3,6 +3,7 @@ import {
 	type AgentEvent,
 	type AgentMessage,
 	type AgentTool,
+	type AgentToolResult,
 	type StreamFn,
 	type ThinkingLevel,
 } from "@dg-forsonny/dg-pi-agent-core";
@@ -12,6 +13,7 @@ import { Text } from "@dg-forsonny/dg-pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import type { AgentDefinition } from "../agents.js";
 import type { ToolDefinition } from "../extensions/types.js";
+import type { AgentTracker } from "./agent-tracker.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 // ============================================================================
@@ -27,6 +29,12 @@ const agentSchema = Type.Object({
 	),
 	model: Type.Optional(
 		Type.String({ description: "Optional model override for this agent (e.g. 'anthropic/claude-sonnet-4')" }),
+	),
+	run_in_background: Type.Optional(
+		Type.Boolean({
+			description:
+				"When true, the agent runs asynchronously and returns immediately with an agent ID. Use agent_status to check results later.",
+		}),
 	),
 	maxCost: Type.Optional(
 		Type.Number({
@@ -80,6 +88,8 @@ export interface AgentToolOptions {
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Default max cost in dollars for agent invocations (from settings) */
 	defaultMaxCost?: number;
+	/** Tracker for background agent execution */
+	agentTracker?: AgentTracker;
 	/** Current nesting depth (0 = top-level). Default: 0 */
 	currentDepth?: number;
 	/** Hard nesting limit. Default: 3 */
@@ -232,6 +242,7 @@ export function createAgentToolDefinition(
 		model,
 		contextFiles,
 		defaultMaxCost,
+		agentTracker,
 		currentDepth = 0,
 		maxDepth = 3,
 	} = options;
@@ -273,6 +284,7 @@ export function createAgentToolDefinition(
 				model: modelOverride,
 				description: taskDesc,
 				maxCost: maxCostOverride,
+				run_in_background: runInBackground,
 			} = params;
 			const startedAt = Date.now();
 
@@ -356,6 +368,7 @@ export function createAgentToolDefinition(
 					model: resolvedModel,
 					contextFiles,
 					defaultMaxCost,
+					agentTracker,
 					currentDepth: currentDepth + 1,
 					maxDepth,
 				});
@@ -385,140 +398,167 @@ export function createAgentToolDefinition(
 				toolExecution: "parallel",
 			});
 
-			// Track turns and stream progress
-			let turns = 0;
-			let aborted = false;
-			let maxTurnsReached = false;
-			let costLimitReached = false;
+			// Helper: run the subagent to completion and return result
+			const runToCompletion = async (
+				progressCallback?: typeof onUpdate,
+				abortSignal?: AbortSignal,
+			): Promise<AgentToolResult<AgentToolDetails>> => {
+				let turns = 0;
+				let aborted = false;
+				let maxTurnsReached = false;
+				let costLimitReached = false;
 
-			subagent.subscribe((event: AgentEvent) => {
-				if (event.type === "turn_end") {
-					turns++;
+				subagent.subscribe((event: AgentEvent) => {
+					if (event.type === "turn_end") {
+						turns++;
 
-					// Enforce max turns
-					if (turns >= agentDef.maxTurns) {
-						maxTurnsReached = true;
-						subagent.abort();
+						if (turns >= agentDef.maxTurns) {
+							maxTurnsReached = true;
+							subagent.abort();
+						}
+
+						const usage = aggregateUsage(subagent.state.messages);
+
+						if (resolvedMaxCost !== undefined && usage.cost > resolvedMaxCost) {
+							costLimitReached = true;
+							subagent.abort();
+						}
+						progressCallback?.({
+							content: [
+								{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | ${usage.totalTokens} tokens]` },
+							],
+							details: {
+								agentName,
+								description: taskDesc,
+								turns,
+								totalTokens: usage.totalTokens,
+								cost: usage.cost,
+								status: "success" as const,
+								durationMs: Date.now() - startedAt,
+							},
+						});
 					}
 
-					// Stream progress update to parent
-					const usage = aggregateUsage(subagent.state.messages);
-
-					// Enforce cost limit
-					if (resolvedMaxCost !== undefined && usage.cost > resolvedMaxCost) {
-						costLimitReached = true;
-						subagent.abort();
+					if (event.type === "tool_execution_start") {
+						progressCallback?.({
+							content: [
+								{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | running ${event.toolName}...]` },
+							],
+							details: {
+								agentName,
+								description: taskDesc,
+								turns,
+								totalTokens: 0,
+								cost: 0,
+								status: "success" as const,
+								durationMs: Date.now() - startedAt,
+							},
+						});
 					}
-					onUpdate?.({
-						content: [
-							{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | ${usage.totalTokens} tokens]` },
-						],
+				});
+
+				if (abortSignal) {
+					const onAbort = () => {
+						aborted = true;
+						subagent.abort();
+					};
+					if (abortSignal.aborted) {
+						onAbort();
+					} else {
+						abortSignal.addEventListener("abort", onAbort, { once: true });
+					}
+				}
+
+				try {
+					await subagent.prompt(fullTask);
+					await subagent.waitForIdle();
+
+					const messages = subagent.state.messages;
+					const finalText = extractFinalText(messages);
+					const usage = aggregateUsage(messages);
+					const durationMs = Date.now() - startedAt;
+
+					let status: AgentToolDetails["status"] = "success";
+					let headerNote = "";
+					if (aborted) {
+						status = "aborted";
+						headerNote = " (aborted)";
+					} else if (costLimitReached) {
+						status = "cost-limit";
+						headerNote = ` (stopped at $${resolvedMaxCost?.toFixed(2)} cost limit)`;
+					} else if (maxTurnsReached) {
+						status = "max-turns";
+						headerNote = ` (stopped at ${agentDef.maxTurns} turn limit)`;
+					}
+
+					const header = `[Agent: ${agentName} | ${turns} turns | ${usage.totalTokens} tokens | ${formatDuration(durationMs)}${headerNote}]`;
+
+					return {
+						content: [{ type: "text", text: `${header}\n\n${finalText}` }],
 						details: {
 							agentName,
 							description: taskDesc,
 							turns,
 							totalTokens: usage.totalTokens,
 							cost: usage.cost,
-							status: "success" as const,
-							durationMs: Date.now() - startedAt,
+							status,
+							durationMs,
 						},
-					});
-				}
+					};
+				} catch (error) {
+					const durationMs = Date.now() - startedAt;
+					const messages = subagent.state.messages;
+					const partialText = messages.length > 0 ? extractFinalText(messages) : undefined;
+					const usage = messages.length > 0 ? aggregateUsage(messages) : { totalTokens: 0, cost: 0 };
 
-				if (event.type === "tool_execution_start") {
-					onUpdate?.({
-						content: [
-							{ type: "text", text: `[Agent: ${agentName} | turn ${turns} | running ${event.toolName}...]` },
-						],
+					const errorMsg = error instanceof Error ? error.message : String(error);
+					const status: AgentToolDetails["status"] = aborted ? "aborted" : "error";
+					const header = `[Agent: ${agentName} | ${status.toUpperCase()} | ${turns} turns | ${formatDuration(durationMs)}]`;
+					const body = partialText
+						? `${errorMsg}\n\n## Partial results before ${status}:\n\n${partialText}`
+						: errorMsg;
+
+					return {
+						content: [{ type: "text", text: `${header}\n\n${body}` }],
 						details: {
 							agentName,
 							description: taskDesc,
 							turns,
-							totalTokens: 0,
-							cost: 0,
-							status: "success" as const,
-							durationMs: Date.now() - startedAt,
+							totalTokens: usage.totalTokens,
+							cost: usage.cost,
+							status,
+							durationMs,
 						},
-					});
+					};
 				}
-			});
+			};
 
-			// Propagate abort signal from parent
-			if (signal) {
-				const onAbort = () => {
-					aborted = true;
-					subagent.abort();
-				};
-				if (signal.aborted) {
-					onAbort();
-				} else {
-					signal.addEventListener("abort", onAbort, { once: true });
-				}
-			}
-
-			try {
-				await subagent.prompt(fullTask);
-				await subagent.waitForIdle();
-
-				const messages = subagent.state.messages;
-				const finalText = extractFinalText(messages);
-				const usage = aggregateUsage(messages);
-				const durationMs = Date.now() - startedAt;
-
-				let status: AgentToolDetails["status"] = "success";
-				let headerNote = "";
-				if (aborted) {
-					status = "aborted";
-					headerNote = " (aborted)";
-				} else if (costLimitReached) {
-					status = "cost-limit";
-					headerNote = ` (stopped at $${resolvedMaxCost?.toFixed(2)} cost limit)`;
-				} else if (maxTurnsReached) {
-					status = "max-turns";
-					headerNote = ` (stopped at ${agentDef.maxTurns} turn limit)`;
-				}
-
-				const header = `[Agent: ${agentName} | ${turns} turns | ${usage.totalTokens} tokens | ${formatDuration(durationMs)}${headerNote}]`;
+			// Background execution: return immediately, track agent
+			if (runInBackground && agentTracker) {
+				const completionPromise = runToCompletion(undefined, signal);
+				const agentId = agentTracker.register(agentName, subagent, completionPromise, taskDesc);
 
 				return {
-					content: [{ type: "text", text: `${header}\n\n${finalText}` }],
+					content: [
+						{
+							type: "text",
+							text: `Background agent started. ID: ${agentId} (${agentName}). Use agent_status to check progress or retrieve results.`,
+						},
+					],
 					details: {
 						agentName,
 						description: taskDesc,
-						turns,
-						totalTokens: usage.totalTokens,
-						cost: usage.cost,
-						status,
-						durationMs,
-					},
-				};
-			} catch (error) {
-				const durationMs = Date.now() - startedAt;
-				// Include partial results if available
-				const messages = subagent.state.messages;
-				const partialText = messages.length > 0 ? extractFinalText(messages) : undefined;
-				const usage = messages.length > 0 ? aggregateUsage(messages) : { totalTokens: 0, cost: 0 };
-
-				const errorMsg = error instanceof Error ? error.message : String(error);
-				const status: AgentToolDetails["status"] = aborted ? "aborted" : "error";
-				const header = `[Agent: ${agentName} | ${status.toUpperCase()} | ${turns} turns | ${formatDuration(durationMs)}]`;
-				const body = partialText
-					? `${errorMsg}\n\n## Partial results before ${status}:\n\n${partialText}`
-					: errorMsg;
-
-				return {
-					content: [{ type: "text", text: `${header}\n\n${body}` }],
-					details: {
-						agentName,
-						description: taskDesc,
-						turns,
-						totalTokens: usage.totalTokens,
-						cost: usage.cost,
-						status,
-						durationMs,
+						turns: 0,
+						totalTokens: 0,
+						cost: 0,
+						status: "success" as const,
+						durationMs: 0,
 					},
 				};
 			}
+
+			// Foreground execution: run and await result
+			return runToCompletion(onUpdate, signal);
 		},
 
 		renderCall(args, _theme, context) {
