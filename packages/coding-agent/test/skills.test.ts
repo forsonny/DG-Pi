@@ -375,7 +375,7 @@ describe("skills", () => {
 			const { skills: withTilde } = loadSkills({
 				agentDir: emptyAgentDir,
 				cwd: emptyCwd,
-				skillPaths: ["~/.pi/agent/skills"],
+				skillPaths: ["~/.dg-pi/agent/skills"],
 			});
 			const { skills: withoutTilde } = loadSkills({
 				agentDir: emptyAgentDir,

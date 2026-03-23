@@ -392,7 +392,7 @@ pi agent qwen -i
 pi agent qwen -i -c
 ```
 
-Sessions are stored in `~/.pi/sessions/` organized by project path and include:
+Sessions are stored in `~/.dg-pi/sessions/` organized by project path and include:
 - Complete conversation history
 - Tool call results
 - Token usage statistics
@@ -496,14 +496,14 @@ pi ssh "du -sh ~/.cache/huggingface/hub/*"
 pi ssh "ls -la ~/.vllm_logs/"
 
 # Check agent session history
-ls -la ~/.pi/sessions/
+ls -la ~/.dg-pi/sessions/
 ```
 
 ## Environment Variables
 
 - `HF_TOKEN` - HuggingFace token for model downloads
 - `PI_API_KEY` - API key for vLLM endpoints
-- `PI_CONFIG_DIR` - Config directory (default: `~/.pi`)
+- `PI_CONFIG_DIR` - Config directory (default: `~/.dg-pi`)
 - `OPENAI_API_KEY` - Used by `pi-agent` when no `--api-key` provided
 
 ## License

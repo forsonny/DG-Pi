@@ -5,7 +5,7 @@ import type { Config, Pod } from "./types.js";
 
 // Get config directory from env or use default
 const getConfigDir = (): string => {
-	const configDir = process.env.PI_CONFIG_DIR || join(homedir(), ".pi");
+	const configDir = process.env.DG_PI_CONFIG_DIR || join(homedir(), ".dg-pi");
 	if (!existsSync(configDir)) {
 		mkdirSync(configDir, { recursive: true });
 	}

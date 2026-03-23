@@ -24,7 +24,7 @@ Pi implements the [Agent Skills standard](https://agentskills.io/specification),
 Pi loads skills from:
 
 - Global:
-  - `~/.pi/agent/skills/`
+  - `~/.dg-pi/agent/skills/`
   - `~/.agents/skills/`
 - Project:
   - `.pi/skills/`

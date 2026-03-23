@@ -65,7 +65,7 @@ function printHelp() {
 	console.log(`Usage: node scripts/edit-tool-stats.mjs [options]
 
 Options:
-  --sessions-dir <path>  Sessions directory (default: ~/.pi/agent/sessions)
+  --sessions-dir <path>  Sessions directory (default: ~/.dg-pi/agent/sessions)
   --model <substring>    Filter provider/model by substring
   --ext <extension>      Filter by file extension, e.g. .ts
   --failed-only          Include only failed edit calls

@@ -60,7 +60,7 @@ export class ProcessTerminal implements Terminal {
 	private _modifyOtherKeysActive = false;
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
-	private writeLogPath = process.env.PI_TUI_WRITE_LOG || "";
+	private writeLogPath = process.env.DG_PI_TUI_WRITE_LOG || "";
 
 	get kittyProtocolActive(): boolean {
 		return this._kittyProtocolActive;

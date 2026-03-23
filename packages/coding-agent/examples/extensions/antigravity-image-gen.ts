@@ -11,8 +11,8 @@
  *
  * Save modes (tool param, env var, or config file):
  *   save=none     - Don't save to disk (default)
- *   save=project  - Save to <repo>/.pi/generated-images/
- *   save=global   - Save to ~/.pi/agent/generated-images/
+ *   save=project  - Save to <repo>/.dg-pi/generated-images/
+ *   save=global   - Save to ~/.dg-pi/agent/generated-images/
  *   save=custom   - Save to saveDir param or PI_IMAGE_SAVE_DIR
  *
  * Environment variables:
@@ -20,8 +20,8 @@
  *   PI_IMAGE_SAVE_DIR   - Directory for custom save mode
  *
  * Config files (project overrides global):
- *   ~/.pi/agent/extensions/antigravity-image-gen.json
- *   <repo>/.pi/extensions/antigravity-image-gen.json
+ *   ~/.dg-pi/agent/extensions/antigravity-image-gen.json
+ *   <repo>/.dg-pi/extensions/antigravity-image-gen.json
  *   Example: { "save": "global" }
  */
 
@@ -29,8 +29,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { StringEnum } from "@mariozechner/pi-ai";
-import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "@mariozechner/pi-coding-agent";
+import { StringEnum } from "@dg-forsonny/dg-pi-ai";
+import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "@dg-forsonny/dg-pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 
 const PROVIDER = "google-antigravity";
@@ -51,7 +51,7 @@ const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com"
 const DEFAULT_ANTIGRAVITY_VERSION = "1.18.3";
 
 const ANTIGRAVITY_HEADERS = {
-	"User-Agent": `antigravity/${process.env.PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION} darwin/arm64`,
+	"User-Agent": `antigravity/${process.env.DG_PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION} darwin/arm64`,
 	"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
 	"Client-Metadata": JSON.stringify({
 		ideType: "IDE_UNSPECIFIED",
@@ -191,7 +191,7 @@ function loadConfig(cwd: string): ExtensionConfig {
 
 function resolveSaveConfig(params: ToolParams, cwd: string): SaveConfig {
 	const config = loadConfig(cwd);
-	const envMode = (process.env.PI_IMAGE_SAVE_MODE || "").toLowerCase();
+	const envMode = (process.env.DG_PI_IMAGE_SAVE_MODE || "").toLowerCase();
 	const paramMode = params.save;
 	const mode = (paramMode || envMode || config.save || DEFAULT_SAVE_MODE) as SaveMode;
 
@@ -209,7 +209,7 @@ function resolveSaveConfig(params: ToolParams, cwd: string): SaveConfig {
 	}
 
 	if (mode === "custom") {
-		const dir = params.saveDir || process.env.PI_IMAGE_SAVE_DIR || config.saveDir;
+		const dir = params.saveDir || process.env.DG_PI_IMAGE_SAVE_DIR || config.saveDir;
 		if (!dir || !dir.trim()) {
 			throw new Error("save=custom requires saveDir or PI_IMAGE_SAVE_DIR.");
 		}

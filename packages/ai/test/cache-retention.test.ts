@@ -4,17 +4,17 @@ import { stream } from "../src/stream.js";
 import type { Context } from "../src/types.js";
 
 describe("Cache Retention (PI_CACHE_RETENTION)", () => {
-	const originalEnv = process.env.PI_CACHE_RETENTION;
+	const originalEnv = process.env.DG_PI_CACHE_RETENTION;
 
 	beforeEach(() => {
-		delete process.env.PI_CACHE_RETENTION;
+		delete process.env.DG_PI_CACHE_RETENTION;
 	});
 
 	afterEach(() => {
 		if (originalEnv !== undefined) {
-			process.env.PI_CACHE_RETENTION = originalEnv;
+			process.env.DG_PI_CACHE_RETENTION = originalEnv;
 		} else {
-			delete process.env.PI_CACHE_RETENTION;
+			delete process.env.DG_PI_CACHE_RETENTION;
 		}
 	});
 
@@ -49,7 +49,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 		);
 
 		it.skipIf(!process.env.ANTHROPIC_API_KEY)("should use 1h cache TTL when PI_CACHE_RETENTION=long", async () => {
-			process.env.PI_CACHE_RETENTION = "long";
+			process.env.DG_PI_CACHE_RETENTION = "long";
 			const model = getModel("anthropic", "claude-3-5-haiku-20241022");
 			let capturedPayload: any = null;
 
@@ -71,7 +71,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 		});
 
 		it("should not add ttl when baseUrl is not api.anthropic.com", async () => {
-			process.env.PI_CACHE_RETENTION = "long";
+			process.env.DG_PI_CACHE_RETENTION = "long";
 
 			// Create a model with a different baseUrl (simulating a proxy)
 			const baseModel = getModel("anthropic", "claude-3-5-haiku-20241022");
@@ -220,7 +220,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 		it.skipIf(!process.env.OPENAI_API_KEY)(
 			"should set prompt_cache_retention to 24h when PI_CACHE_RETENTION=long",
 			async () => {
-				process.env.PI_CACHE_RETENTION = "long";
+				process.env.DG_PI_CACHE_RETENTION = "long";
 				const model = getModel("openai", "gpt-4o-mini");
 				let capturedPayload: any = null;
 
@@ -241,7 +241,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 		);
 
 		it("should not set prompt_cache_retention when baseUrl is not api.openai.com", async () => {
-			process.env.PI_CACHE_RETENTION = "long";
+			process.env.DG_PI_CACHE_RETENTION = "long";
 
 			// Create a model with a different baseUrl (simulating a proxy)
 			const baseModel = getModel("openai", "gpt-4o-mini");

@@ -38,7 +38,7 @@
 
 ### Fixed
 
-- Fixed mom startup crash caused by settings API drift by using `SettingsManager` with workspace-backed storage ([#1444](https://github.com/badlogic/pi-mono/issues/1444))
+- Fixed mom startup crash caused by settings API drift by using `SettingsManager` with workspace-backed storage ([#1444](https://github.com/forsonny/DG-Pi/issues/1444))
 
 ## [0.55.3] - 2026-02-27
 
@@ -154,7 +154,7 @@
 
 ### Fixed
 
-- Use coding-agent's SessionManager instead of custom MomSessionManager to fix API mismatch crash ([#595](https://github.com/badlogic/pi-mono/issues/595))
+- Use coding-agent's SessionManager instead of custom MomSessionManager to fix API mismatch crash ([#595](https://github.com/forsonny/DG-Pi/issues/595))
 
 ## [0.42.4] - 2026-01-10
 
@@ -222,7 +222,7 @@
 
 ### Breaking Changes
 
-- `AgentTool` import moved from `@mariozechner/pi-ai` to `@mariozechner/pi-agent-core`
+- `AgentTool` import moved from `@dg-forsonny/dg-pi-ai` to `@dg-forsonny/dg-pi-agent-core`
 - `AppMessage` type renamed to `AgentMessage`
 - `Attachment` type replaced with `ImageContent` for image handling
 - `MomSessionManager.loadSession()` renamed to `buildSessionContex()`
@@ -240,7 +240,7 @@
 
 ### Added
 
-- Support for OAuth login via coding agent's `/login` command (link `~/.pi/agent/auth.json` to `~/.pi/mom/auth.json`)
+- Support for OAuth login via coding agent's `/login` command (link `~/.dg-pi/agent/auth.json` to `~/.dg-pi/mom/auth.json`)
 
 ## [0.20.2] - 2025-12-13
 
