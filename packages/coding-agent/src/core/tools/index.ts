@@ -1,4 +1,11 @@
 export {
+	type AgentToolDetails,
+	type AgentToolInput,
+	type AgentToolOptions,
+	createAgentTool,
+	createAgentToolDefinition,
+} from "./agent.js";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,

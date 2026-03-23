@@ -1,6 +1,6 @@
 DG-Pi is a minimal terminal coding harness, forked from [Pi](https://github.com/badlogic/pi-mono). Adapt DG-Pi to your workflows, not the other way around, without having to fork and modify internals. Extend it with TypeScript [Extensions](#extensions), [Skills](#skills), [Prompt Templates](#prompt-templates), and [Themes](#themes). Put your extensions, skills, prompt templates, and themes in [DG-Pi Packages](#dg-pi-packages) and share them with others via npm or git.
 
-DG-Pi ships with powerful defaults but skips features like sub agents and plan mode. Instead, you can ask DG-Pi to build what you want or install a third party package that matches your workflow.
+DG-Pi ships with powerful defaults and built-in agents for focused subtasks. Plan mode is not included by default but you can ask DG-Pi to build what you want or install a third party package that matches your workflow.
 
 DG-Pi runs in four modes: interactive, print or JSON, RPC for process integration, and an SDK for embedding in your own apps.
 
@@ -21,6 +21,7 @@ DG-Pi runs in four modes: interactive, print or JSON, RPC for process integratio
 - [Customization](#customization)
   - [Prompt Templates](#prompt-templates)
   - [Skills](#skills)
+  - [Agents](#agents)
   - [Extensions](#extensions)
   - [Themes](#themes)
   - [Pi Packages](#pi-packages)
@@ -99,7 +100,7 @@ See [docs/providers.md](docs/providers.md) for detailed setup instructions.
 
 The interface from top to bottom:
 
-- **Startup header** - Shows shortcuts (`/hotkeys` for all), loaded AGENTS.md files, prompt templates, skills, and extensions
+- **Startup header** - Shows shortcuts (`/hotkeys` for all), loaded AGENTS.md files, prompt templates, skills, agents, and extensions
 - **Messages** - Your messages, assistant responses, tool calls and results, notifications, errors, and extension UI
 - **Editor** - Where you type; border color indicates thinking level
 - **Footer** - Working directory, session name, total token/cache usage, cost, context usage, current model
@@ -120,7 +121,7 @@ Standard editing keybindings for delete word, undo, etc. See [docs/keybindings.m
 
 ### Commands
 
-Type `/` in the editor to trigger commands. [Extensions](#extensions) can register custom commands, [skills](#skills) are available as `/skill:name`, and [prompt templates](#prompt-templates) expand via `/templatename`.
+Type `/` in the editor to trigger commands. [Extensions](#extensions) can register custom commands, [skills](#skills) are available as `/skill:name`, [agents](#agents) are spawned via the `agent` tool, and [prompt templates](#prompt-templates) expand via `/templatename`.
 
 | Command | Description |
 |---------|-------------|
@@ -275,6 +276,29 @@ Use this skill when the user asks about X.
 ```
 
 Place in `~/.dg-pi/agent/skills/`, `~/.agents/skills/`, `.dg-pi/skills/`, or `.agents/skills/` (from `cwd` up through parent directories) or a [pi package](#pi-packages) to share with others. See [docs/skills.md](docs/skills.md).
+
+### Agents
+
+Autonomous subagents for focused, independent work. The LLM spawns agents via the `agent` tool, giving each one its own context window and tool set to complete a specific task without polluting the main conversation.
+
+DG-Pi ships with five built-in agents: **explore** (codebase understanding), **plan** (task planning), **research** (information gathering), **writer** (documentation and content), and **code** (implementation tasks).
+
+Define custom agents with an `AGENT.md` file:
+
+```markdown
+---
+name: my-agent
+description: Does a specific thing
+tools:
+  - read
+  - bash
+  - grep
+maxTurns: 10
+---
+You are a specialist agent. Your job is to...
+```
+
+Place in `~/.dg-pi/agent/agents/`, `.dg-pi/agents/`, or a [pi package](#pi-packages) to share with others. See [docs/agents.md](docs/agents.md).
 
 ### Extensions
 

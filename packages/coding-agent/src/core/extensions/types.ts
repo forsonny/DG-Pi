@@ -1036,6 +1036,9 @@ export interface ExtensionAPI {
 		tool: ToolDefinition<TParams, TDetails, TState>,
 	): void;
 
+	/** Register an agent that the LLM can spawn as a subagent. */
+	registerAgent(agent: AgentRegistration): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -1283,6 +1286,33 @@ export interface RegisteredTool {
 	sourceInfo: SourceInfo;
 }
 
+/** Configuration for registering an agent via pi.registerAgent(). */
+export interface AgentRegistration {
+	/** Agent name (lowercase a-z, 0-9, hyphens). */
+	name: string;
+	/** Short description for the LLM to decide when to use this agent. */
+	description: string;
+	/** The agent's system prompt content. */
+	systemPrompt: string;
+	/** Tool allowlist (omit to inherit all parent tools). */
+	tools?: string[];
+	/** Model override (e.g. "anthropic/claude-sonnet-4"). */
+	model?: string;
+	/** Thinking level override. */
+	thinking?: string;
+	/** Max turns for agent execution. Default: 50. */
+	maxTurns?: number;
+	/** Max sub-agent nesting depth. Default: 0 (no nesting). */
+	maxNesting?: number;
+	/** If true, only available via explicit /agent:name command. */
+	disableModelInvocation?: boolean;
+}
+
+export interface RegisteredAgent {
+	definition: AgentRegistration;
+	sourceInfo: SourceInfo;
+}
+
 export interface ExtensionFlag {
 	name: string;
 	description?: string;
@@ -1425,6 +1455,7 @@ export interface Extension {
 	sourceInfo: SourceInfo;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	agents: Map<string, RegisteredAgent>;
 	messageRenderers: Map<string, MessageRenderer>;
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;

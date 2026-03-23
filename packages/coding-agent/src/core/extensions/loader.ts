@@ -180,6 +180,13 @@ function createExtensionAPI(
 			runtime.refreshTools();
 		},
 
+		registerAgent(agent: import("./types.js").AgentRegistration): void {
+			extension.agents.set(agent.name, {
+				definition: agent,
+				sourceInfo: extension.sourceInfo,
+			});
+		},
+
 		registerCommand(name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">): void {
 			extension.commands.set(name, {
 				name,
@@ -319,6 +326,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		sourceInfo: createSyntheticSourceInfo(extensionPath, { source, baseDir }),
 		handlers: new Map(),
 		tools: new Map(),
+		agents: new Map(),
 		messageRenderers: new Map(),
 		commands: new Map(),
 		flags: new Map(),

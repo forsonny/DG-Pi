@@ -26,6 +26,13 @@ Fork of [Pi](https://github.com/badlogic/pi-mono) (v0.62.0). Terminal coding age
 
 External deps kept as `@mariozechner/*`: `jiti`, `clipboard`, `mini-lit`. Do not rename these.
 
+## Extensibility
+
+- **Extensions**: TypeScript modules in `.dg-pi/extensions/` -- register tools, commands, event handlers
+- **Skills**: Markdown files in `.dg-pi/skills/` -- on-demand instructions loaded into conversation
+- **Agents**: Markdown files in `.dg-pi/agents/` -- autonomous subagents with independent tool access
+- **Built-in agents**: `explore`, `plan`, `research`, `writer`, `code` (in `packages/coding-agent/agents/`)
+
 ## Build & Check
 
 ```bash

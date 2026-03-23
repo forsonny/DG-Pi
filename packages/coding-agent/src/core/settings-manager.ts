@@ -81,6 +81,7 @@ export interface Settings {
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
+	agents?: string[]; // Array of local agent definition paths or directories
 	prompts?: string[]; // Array of local prompt template paths or directories
 	themes?: string[]; // Array of local theme file paths or directories
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
@@ -778,6 +779,23 @@ export class SettingsManager {
 		const projectSettings = structuredClone(this.projectSettings);
 		projectSettings.skills = paths;
 		this.markProjectModified("skills");
+		this.saveProjectSettings(projectSettings);
+	}
+
+	getAgentPaths(): string[] {
+		return [...(this.settings.agents ?? [])];
+	}
+
+	setAgentPaths(paths: string[]): void {
+		this.globalSettings.agents = paths;
+		this.markModified("agents");
+		this.save();
+	}
+
+	setProjectAgentPaths(paths: string[]): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.agents = paths;
+		this.markProjectModified("agents");
 		this.saveProjectSettings(projectSettings);
 	}
 

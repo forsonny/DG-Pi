@@ -29,6 +29,8 @@ import { getDocsPath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
+import type { AgentDefinition } from "./agents.js";
+import { MAX_NESTING_DEPTH } from "./agents.js";
 import { type BashResult, executeBash as executeBashCommand, executeBashWithOperations } from "./bash-executor.js";
 import {
 	type CompactionResult,
@@ -78,6 +80,7 @@ import type { SettingsManager } from "./settings-manager.js";
 import type { SlashCommandInfo } from "./slash-commands.js";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { createAgentToolDefinition } from "./tools/agent.js";
 import type { BashOperations } from "./tools/bash.js";
 import { createAllToolDefinitions } from "./tools/index.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
@@ -854,10 +857,12 @@ export class AgentSession {
 			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
+		const loadedAgents = this._resourceLoader.getAgentDefinitions().agents;
 
 		return buildSystemPrompt({
 			cwd: this._cwd,
 			skills: loadedSkills,
+			agents: loadedAgents,
 			contextFiles: loadedContextFiles,
 			customPrompt: loaderSystemPrompt,
 			appendSystemPrompt,
@@ -2200,6 +2205,48 @@ export class AgentSession {
 	private _refreshToolRegistry(options?: { activeToolNames?: string[]; includeAllExtensionTools?: boolean }): void {
 		const previousRegistryNames = new Set(this._toolRegistry.keys());
 		const previousActiveToolNames = this.getActiveToolNames();
+
+		// Build agent registry from file-loaded + extension-registered agents
+		const fileAgents = this._resourceLoader.getAgentDefinitions().agents;
+		const extensionAgents = this._extensionRunner?.getAllRegisteredAgents() ?? [];
+		const agentDefRegistry = new Map<string, AgentDefinition>();
+		for (const a of fileAgents) {
+			agentDefRegistry.set(a.name, a);
+		}
+		for (const ra of extensionAgents) {
+			if (!agentDefRegistry.has(ra.definition.name)) {
+				// Convert extension AgentRegistration to AgentDefinition
+				agentDefRegistry.set(ra.definition.name, {
+					name: ra.definition.name,
+					description: ra.definition.description,
+					systemPrompt: ra.definition.systemPrompt,
+					filePath: ra.sourceInfo.path,
+					baseDir: ra.sourceInfo.baseDir ?? "",
+					sourceInfo: ra.sourceInfo,
+					tools: ra.definition.tools,
+					model: ra.definition.model,
+					thinking: ra.definition.thinking,
+					maxTurns: ra.definition.maxTurns ?? 50,
+					maxNesting: Math.min(ra.definition.maxNesting ?? 0, MAX_NESTING_DEPTH),
+					disableModelInvocation: ra.definition.disableModelInvocation ?? false,
+				});
+			}
+		}
+
+		// Add agent tool to base definitions if agents are available
+		if (agentDefRegistry.size > 0) {
+			const agentToolDef = createAgentToolDefinition({
+				cwd: this._cwd,
+				agentRegistry: agentDefRegistry,
+				parentToolDefinitions: this._baseToolDefinitions,
+				streamFn: this.agent.streamFn,
+				getApiKey: this.agent.getApiKey,
+				model: this.agent.state.model,
+			});
+			this._baseToolDefinitions.set("agent", agentToolDef as unknown as ToolDefinition);
+		} else {
+			this._baseToolDefinitions.delete("agent");
+		}
 
 		const registeredTools = this._extensionRunner?.getAllRegisteredTools() ?? [];
 		const allCustomTools = [

@@ -34,6 +34,8 @@ export interface Args {
 	export?: string;
 	noSkills?: boolean;
 	skills?: string[];
+	noAgents?: boolean;
+	agents?: string[];
 	promptTemplates?: string[];
 	noPromptTemplates?: boolean;
 	themes?: string[];
@@ -134,6 +136,9 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 		} else if (arg === "--skill" && i + 1 < args.length) {
 			result.skills = result.skills ?? [];
 			result.skills.push(args[++i]);
+		} else if (arg === "--agent" && i + 1 < args.length) {
+			result.agents = result.agents ?? [];
+			result.agents.push(args[++i]);
 		} else if (arg === "--prompt-template" && i + 1 < args.length) {
 			result.promptTemplates = result.promptTemplates ?? [];
 			result.promptTemplates.push(args[++i]);
@@ -142,6 +147,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.themes.push(args[++i]);
 		} else if (arg === "--no-skills" || arg === "-ns") {
 			result.noSkills = true;
+		} else if (arg === "--no-agents" || arg === "-na") {
+			result.noAgents = true;
 		} else if (arg === "--no-prompt-templates" || arg === "-np") {
 			result.noPromptTemplates = true;
 		} else if (arg === "--no-themes") {
@@ -218,6 +225,8 @@ ${chalk.bold("Options:")}
   --no-extensions, -ne           Disable extension discovery (explicit -e paths still work)
   --skill <path>                 Load a skill file or directory (can be used multiple times)
   --no-skills, -ns               Disable skills discovery and loading
+  --agent <path>                 Load an agent definition file or directory (can be used multiple times)
+  --no-agents, -na               Disable agent discovery and loading
   --prompt-template <path>       Load a prompt template file or directory (can be used multiple times)
   --no-prompt-templates, -np     Disable prompt template discovery and loading
   --theme <path>                 Load a theme file or directory (can be used multiple times)

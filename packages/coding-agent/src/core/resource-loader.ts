@@ -8,6 +8,8 @@ import type { ResourceDiagnostic } from "./diagnostics.js";
 
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.js";
 
+import type { AgentDefinition } from "./agents.js";
+import { loadAgents } from "./agents.js";
 import { createEventBus, type EventBus } from "./event-bus.js";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.js";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.js";
@@ -31,6 +33,7 @@ export interface ResourceLoader {
 	getPrompts(): { prompts: PromptTemplate[]; diagnostics: ResourceDiagnostic[] };
 	getThemes(): { themes: Theme[]; diagnostics: ResourceDiagnostic[] };
 	getAgentsFiles(): { agentsFiles: Array<{ path: string; content: string }> };
+	getAgentDefinitions(): { agents: AgentDefinition[]; diagnostics: ResourceDiagnostic[] };
 	getSystemPrompt(): string | undefined;
 	getAppendSystemPrompt(): string[];
 	extendResources(paths: ResourceExtensionPaths): void;
@@ -118,11 +121,13 @@ export interface DefaultResourceLoaderOptions {
 	eventBus?: EventBus;
 	additionalExtensionPaths?: string[];
 	additionalSkillPaths?: string[];
+	additionalAgentPaths?: string[];
 	additionalPromptTemplatePaths?: string[];
 	additionalThemePaths?: string[];
 	extensionFactories?: ExtensionFactory[];
 	noExtensions?: boolean;
 	noSkills?: boolean;
+	noAgents?: boolean;
 	noPromptTemplates?: boolean;
 	noThemes?: boolean;
 	systemPrompt?: string;
@@ -155,11 +160,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private packageManager: DefaultPackageManager;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
+	private additionalAgentPaths: string[];
 	private additionalPromptTemplatePaths: string[];
 	private additionalThemePaths: string[];
 	private extensionFactories: ExtensionFactory[];
 	private noExtensions: boolean;
 	private noSkills: boolean;
+	private noAgents: boolean;
 	private noPromptTemplates: boolean;
 	private noThemes: boolean;
 	private systemPromptSource?: string;
@@ -191,6 +198,8 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private themes: Theme[];
 	private themeDiagnostics: ResourceDiagnostic[];
 	private agentsFiles: Array<{ path: string; content: string }>;
+	private agentDefinitions: AgentDefinition[];
+	private agentDefinitionDiagnostics: ResourceDiagnostic[];
 	private systemPrompt?: string;
 	private appendSystemPrompt: string[];
 	private lastSkillPaths: string[];
@@ -212,11 +221,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 		});
 		this.additionalExtensionPaths = options.additionalExtensionPaths ?? [];
 		this.additionalSkillPaths = options.additionalSkillPaths ?? [];
+		this.additionalAgentPaths = options.additionalAgentPaths ?? [];
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
 		this.extensionFactories = options.extensionFactories ?? [];
 		this.noExtensions = options.noExtensions ?? false;
 		this.noSkills = options.noSkills ?? false;
+		this.noAgents = options.noAgents ?? false;
 		this.noPromptTemplates = options.noPromptTemplates ?? false;
 		this.noThemes = options.noThemes ?? false;
 		this.systemPromptSource = options.systemPrompt;
@@ -237,6 +248,8 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.themes = [];
 		this.themeDiagnostics = [];
 		this.agentsFiles = [];
+		this.agentDefinitions = [];
+		this.agentDefinitionDiagnostics = [];
 		this.appendSystemPrompt = [];
 		this.lastSkillPaths = [];
 		this.extensionSkillSourceInfos = new Map();
@@ -264,6 +277,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 	getAgentsFiles(): { agentsFiles: Array<{ path: string; content: string }> } {
 		return { agentsFiles: this.agentsFiles };
+	}
+
+	getAgentDefinitions(): { agents: AgentDefinition[]; diagnostics: ResourceDiagnostic[] } {
+		return { agents: this.agentDefinitions, diagnostics: this.agentDefinitionDiagnostics };
 	}
 
 	getSystemPrompt(): string | undefined {
@@ -429,6 +446,21 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const agentsFiles = { agentsFiles: loadProjectContextFiles({ cwd: this.cwd, agentDir: this.agentDir }) };
 		const resolvedAgentsFiles = this.agentsFilesOverride ? this.agentsFilesOverride(agentsFiles) : agentsFiles;
 		this.agentsFiles = resolvedAgentsFiles.agentsFiles;
+
+		// Load agent definitions
+		const settingsAgentPaths = this.settingsManager.getAgentPaths();
+		const allAgentPaths = [...this.additionalAgentPaths, ...settingsAgentPaths];
+		const agentDefsResult =
+			this.noAgents && allAgentPaths.length === 0
+				? { agents: [], diagnostics: [] }
+				: loadAgents({
+						cwd: this.cwd,
+						agentDir: this.agentDir,
+						agentPaths: allAgentPaths,
+						includeDefaults: !this.noAgents,
+					});
+		this.agentDefinitions = agentDefsResult.agents;
+		this.agentDefinitionDiagnostics = agentDefsResult.diagnostics;
 
 		const baseSystemPrompt = resolvePromptInput(
 			this.systemPromptSource ?? this.discoverSystemPromptFile(),

@@ -3,6 +3,7 @@
  */
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
+import { type AgentDefinition, formatAgentsForPrompt } from "./agents.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
 
 export interface BuildSystemPromptOptions {
@@ -22,6 +23,8 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Pre-loaded skills. */
 	skills?: Skill[];
+	/** Pre-loaded agent definitions. */
+	agents?: AgentDefinition[];
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -35,6 +38,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		agents: providedAgents,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -45,6 +49,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 	const contextFiles = providedContextFiles ?? [];
 	const skills = providedSkills ?? [];
+	const agents = providedAgents ?? [];
 
 	if (customPrompt) {
 		let prompt = customPrompt;
@@ -66,6 +71,12 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
 		if (customPromptHasRead && skills.length > 0) {
 			prompt += formatSkillsForPrompt(skills);
+		}
+
+		// Append agents section (only if agent tool is available)
+		const customPromptHasAgent = !selectedTools || selectedTools.includes("agent");
+		if (customPromptHasAgent && agents.length > 0) {
+			prompt += formatAgentsForPrompt(agents);
 		}
 
 		// Add date and working directory last
@@ -134,11 +145,11 @@ In addition to the tools above, you may have access to other custom tools depend
 Guidelines:
 ${guidelines}
 
-Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
+Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, agents, or TUI):
 - Main documentation: ${readmePath}
 - Additional docs: ${docsPath}
 - Examples: ${examplesPath} (extensions, custom tools, SDK)
-- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
+- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), agents (docs/agents.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
 - When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
 - Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
 
@@ -158,6 +169,12 @@ Pi documentation (read only when the user asks about pi itself, its SDK, extensi
 	// Append skills section (only if read tool is available)
 	if (hasRead && skills.length > 0) {
 		prompt += formatSkillsForPrompt(skills);
+	}
+
+	// Append agents section (only if agent tool is available)
+	const hasAgent = tools.includes("agent");
+	if (hasAgent && agents.length > 0) {
+		prompt += formatAgentsForPrompt(agents);
 	}
 
 	// Add date and working directory last

@@ -114,6 +114,7 @@ Add a `pi` manifest to `package.json` or use conventional directories. Include t
   "pi": {
     "extensions": ["./extensions"],
     "skills": ["./skills"],
+    "agents": ["./agents"],
     "prompts": ["./prompts"],
     "themes": ["./themes"]
   }
@@ -151,6 +152,7 @@ If no `pi` manifest is present, pi auto-discovers resources from these directori
 
 - `extensions/` loads `.ts` and `.js` files
 - `skills/` recursively finds `SKILL.md` folders and loads top-level `.md` files as skills
+- `agents/` recursively finds `AGENT.md` folders as agent definitions
 - `prompts/` loads `.md` files
 - `themes/` loads `.json` files
 

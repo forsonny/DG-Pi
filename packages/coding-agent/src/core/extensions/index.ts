@@ -21,6 +21,8 @@ export type {
 export { ExtensionRunner } from "./runner.js";
 export type {
 	AgentEndEvent,
+	// Agent Registration
+	AgentRegistration,
 	AgentStartEvent,
 	// Re-exports
 	AgentToolResult,
@@ -98,6 +100,7 @@ export type {
 	ProviderModelConfig,
 	ReadToolCallEvent,
 	ReadToolResultEvent,
+	RegisteredAgent,
 	// Commands
 	RegisteredCommand,
 	RegisteredTool,

@@ -8,6 +8,7 @@ Extensions are TypeScript modules that extend pi's behavior. They can subscribe 
 
 **Key capabilities:**
 - **Custom tools** - Register tools the LLM can call via `pi.registerTool()`
+- **Custom agents** - Register subagents the LLM can spawn via `pi.registerAgent()`
 - **Event interception** - Block or modify tool calls, inject context, customize compaction
 - **User interaction** - Prompt users via `ctx.ui` (select, confirm, input, notify)
 - **Custom UI components** - Full TUI components with keyboard input via `ctx.ui.custom()` for complex interactions
@@ -980,6 +981,37 @@ pi.registerTool({
   renderResult(result, options, theme, context) { ... },
 });
 ```
+
+### pi.registerAgent(definition)
+
+Register an agent that the LLM can spawn as a subagent. See [agents.md](agents.md) for full details on agents.
+
+```typescript
+pi.registerAgent({
+  name: "reviewer",
+  description: "Reviews code for bugs, security issues, and style violations",
+  systemPrompt: `You are a code review agent. Analyze code thoroughly and report issues.
+Focus on: bugs, security vulnerabilities, performance, and style consistency.
+Be concise. Group findings by severity.`,
+  tools: ["read", "grep", "find", "ls"],
+  maxTurns: 30,
+  maxNesting: 0,
+});
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Agent name (lowercase a-z, 0-9, hyphens) |
+| `description` | Yes | When to use this agent |
+| `systemPrompt` | Yes | The agent's system prompt |
+| `tools` | No | Tool allowlist (omit to inherit all) |
+| `model` | No | Model override |
+| `thinking` | No | Thinking level override |
+| `maxTurns` | No | Max turns (default: 50) |
+| `maxNesting` | No | Sub-agent nesting depth (default: 0) |
+| `disableModelInvocation` | No | Hide from system prompt |
 
 ### pi.sendMessage(message, options?)
 

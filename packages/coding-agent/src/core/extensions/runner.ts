@@ -357,6 +357,21 @@ export class ExtensionRunner {
 		return Array.from(toolsByName.values());
 	}
 
+	/** Get all registered agents from all extensions (first registration per name wins). */
+	getAllRegisteredAgents(): import("./types.js").RegisteredAgent[] {
+		const agentsByName = new Map<string, import("./types.js").RegisteredAgent>();
+		for (const ext of this.extensions) {
+			if (ext.agents) {
+				for (const agent of ext.agents.values()) {
+					if (!agentsByName.has(agent.definition.name)) {
+						agentsByName.set(agent.definition.name, agent);
+					}
+				}
+			}
+		}
+		return Array.from(agentsByName.values());
+	}
+
 	/** Get a tool definition by name. Returns undefined if not found. */
 	getToolDefinition(toolName: string): RegisteredTool["definition"] | undefined {
 		for (const ext of this.extensions) {

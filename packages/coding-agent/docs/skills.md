@@ -225,6 +225,10 @@ cd /path/to/brave-search && npm install
 \`\`\`
 ```
 
+## Skills vs Agents
+
+Skills provide on-demand instructions loaded into the main conversation context. For autonomous subtasks with independent tool access and conversation history, see [Agents](agents.md).
+
 ## Skill Repositories
 
 - [Anthropic Skills](https://github.com/anthropics/skills) - Document processing (docx, pdf, pptx, xlsx), web development
